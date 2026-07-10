@@ -62,9 +62,8 @@ func NewClient(baseURL, chatModel, embedModel string) *Client {
 
 // GetEmbedding gets the text embedding vector from Ollama
 func (c *Client) GetEmbedding(ctx context.Context, text string) ([]float64, error) {
-	ctx, span := telemetry.Step(ctx, "ollama.embedding")
+	ctx, span := telemetry.Step(ctx, "ollama.embedding", attribute.String("ollama.model", c.EmbedModel))
 	defer span.End()
-	span.SetAttributes(attribute.String("ollama.model", c.EmbedModel))
 	reqBody, err := json.Marshal(EmbedRequest{
 		Model:  c.EmbedModel,
 		Prompt: text,
@@ -102,12 +101,11 @@ func (c *Client) GetEmbedding(ctx context.Context, text string) ([]float64, erro
 // If stream is false, it returns the single completion string.
 // Context cancellation will abort the Ollama request mid-flight.
 func (c *Client) Chat(ctx context.Context, messages []ChatMessage, stream bool, streamChan chan<- string) (string, error) {
-	ctx, span := telemetry.Step(ctx, "ollama.chat")
-	defer span.End()
-	span.SetAttributes(
+	ctx, span := telemetry.Step(ctx, "ollama.chat",
 		attribute.String("ollama.model", c.ChatModel),
 		attribute.Int("ollama.num_messages", len(messages)),
 	)
+	defer span.End()
 	reqBody, err := json.Marshal(ChatRequest{
 		Model:    c.ChatModel,
 		Messages: messages,

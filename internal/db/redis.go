@@ -38,9 +38,8 @@ func NewRedisManager(addr string) (*RedisManager, error) {
 
 // GetSessionContext fetches conversation context from Redis
 func (r *RedisManager) GetSessionContext(ctx context.Context, sessionID string) ([]ollama.ChatMessage, error) {
-	ctx, span := telemetry.Step(ctx, "redis.get_session")
+	ctx, span := telemetry.Step(ctx, "redis.get_session", attribute.String("redis.key_type", "session_context"))
 	defer span.End()
-	span.SetAttributes(attribute.String("redis.key_type", "session_context"))
 	key := fmt.Sprintf("session:%s:context", sessionID)
 	data, err := r.Client.Get(ctx, key).Result()
 	if err == redis.Nil {
@@ -58,12 +57,11 @@ func (r *RedisManager) GetSessionContext(ctx context.Context, sessionID string) 
 
 // SaveSessionContext saves the conversation history context to Redis with a TTL of 1 hour
 func (r *RedisManager) SaveSessionContext(ctx context.Context, sessionID string, messages []ollama.ChatMessage) error {
-	ctx, span := telemetry.Step(ctx, "redis.save_session")
-	defer span.End()
-	span.SetAttributes(
+	ctx, span := telemetry.Step(ctx, "redis.save_session",
 		attribute.String("redis.key_type", "session_context"),
 		attribute.Int("redis.num_messages", len(messages)),
 	)
+	defer span.End()
 	key := fmt.Sprintf("session:%s:context", sessionID)
 	data, err := json.Marshal(messages)
 	if err != nil {
@@ -85,12 +83,11 @@ func (r *RedisManager) ClearSessionContext(ctx context.Context, sessionID string
 
 // AddAuditLog appends an event to the audit stream (stand-in for Kafka)
 func (r *RedisManager) AddAuditLog(ctx context.Context, turnID string, eventName string, payload map[string]any) error {
-	ctx, span := telemetry.Step(ctx, "redis.audit")
-	defer span.End()
-	span.SetAttributes(
+	ctx, span := telemetry.Step(ctx, "redis.audit",
 		attribute.String("redis.stream", "audit_log_stream"),
 		attribute.String("redis.event_type", eventName),
 	)
+	defer span.End()
 	streamKey := "audit_log_stream"
 
 	// Marshal payload to string

@@ -9,6 +9,8 @@ import (
 	"log"
 
 	"banking-voice-ai-agent/internal/db"
+
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type BankingMCPServer struct {
@@ -21,7 +23,7 @@ func NewBankingMCPServer(mongoManager *db.MongoManager) *BankingMCPServer {
 
 // CallTool routes and executes a tool call, returning the response as a string
 func (s *BankingMCPServer) CallTool(ctx context.Context, name string, args map[string]any) (string, error) {
-	ctx, span := telemetry.Step(ctx, "mcp."+name)
+	ctx, span := telemetry.Step(ctx, "mcp."+name, attribute.String("mcp.tool", name))
 	defer span.End()
 	loggedArgs := make(map[string]any)
 	for k, v := range args {

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type CassandraManager struct {
@@ -85,7 +86,12 @@ func (c *CassandraManager) Close() {
 }
 
 func (c *CassandraManager) LogTurn(ctx context.Context, userID, conversationID string, seq int, role, transcript, intent, action, result string) error {
-	ctx, span := telemetry.Step(ctx, "cassandra.log_turn")
+	ctx, span := telemetry.Step(ctx, "cassandra.log_turn",
+		attribute.String("db.operation", "insert_turn"),
+		attribute.String("db.role", role),
+		attribute.String("db.intent", intent),
+		attribute.String("db.action", action),
+	)
 	defer span.End()
 	query := `INSERT INTO conversation_history (user_id, conversation_id, turn_seq, ts, role, transcript, intent, action, result) 
 	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`

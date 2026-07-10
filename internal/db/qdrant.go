@@ -146,9 +146,8 @@ func (q *QdrantManager) UpsertPoints(ctx context.Context, collection string, poi
 
 // Search queries Qdrant using vector similarity
 func (q *QdrantManager) Search(ctx context.Context, collection string, vector []float64, limit int) ([]QdrantMatch, error) {
-	ctx, span := telemetry.Step(ctx, "qdrant.search")
+	ctx, span := telemetry.Step(ctx, "qdrant.search", attribute.String("qdrant.collection", collection))
 	defer span.End()
-	span.SetAttributes(attribute.String("qdrant.collection", collection))
 	url := fmt.Sprintf("%s/collections/%s/points/search", q.BaseURL, collection)
 
 	bodyMap := map[string]any{

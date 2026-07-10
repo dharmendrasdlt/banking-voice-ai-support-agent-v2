@@ -1134,6 +1134,12 @@
             recognition.onerror = (event) => {
                 console.error("[STT] Speech recognition error:", event.error);
                 sendClientLog('error', 'stt_error', 'Web Speech API error: ' + event.error);
+                
+                // Prevent infinite loop if permission is blocked or hardware is missing
+                if (event.error === 'not-allowed' || event.error === 'audio-capture') {
+                    shouldBeListening = false;
+                    addLog('STT', 'Microphone access denied or hardware error. Speech deactivated.', 'error');
+                }
             };
 
             recognition.onend = () => {
@@ -1146,6 +1152,7 @@
                 // Auto-restart if we are in active voice mode (continuous listening / barge-in support)
                 if (shouldBeListening) {
                     try {
+                        console.log("[STT] Auto-restarting speech recognition...");
                         recognition.start();
                     } catch (e) {
                         console.warn("[STT] Auto-restart on end failed:", e);
@@ -1171,7 +1178,8 @@
                     
                     // Echo filter check: if the heard text is part of what the agent is currently speaking, ignore it!
                     let isEcho = false;
-                    if (currentlyPlayingItem && currentlyPlayingItem.text) {
+                    const isAgentCurrentlySpeaking = (activeAudio !== null) || ('speechSynthesis' in window && window.speechSynthesis.speaking);
+                    if (isAgentCurrentlySpeaking && currentlyPlayingItem && currentlyPlayingItem.text) {
                         const agentTextClean = currentlyPlayingItem.text.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g,"");
                         const heardTextClean = speechText.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g,"");
                         
@@ -1520,6 +1528,7 @@
             if (audioQueue.length === 0) {
                 isPlayingQueue = false;
                 activeAudio = null;
+                currentlyPlayingItem = null;
                 resumeSpeechIfNeeded(); // Resume microphone once all chunks finish speaking
                 return;
             }
