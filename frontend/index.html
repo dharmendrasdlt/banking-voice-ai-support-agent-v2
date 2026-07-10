@@ -1117,6 +1117,8 @@
                 micCircleOuter.className = 'voice-circle-outer listening';
                 micBtn.className = 'voice-circle-inner listening';
                 visualWaveform.className = 'waveform active';
+                transcriptVal.textContent = "Listening...";
+                transcriptVal.className = "transcript-text partial";
                 confirmBox.style.display = 'none';
 
                 // Reset timers
@@ -1183,17 +1185,18 @@
                         const agentTextClean = currentlyPlayingItem.text.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g,"");
                         const heardTextClean = speechText.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g,"");
                         
-                        if (agentTextClean.includes(heardTextClean) || heardTextClean.includes(agentTextClean)) {
-                            isEcho = true;
-                        } else {
-                            // Check word overlap: if > 50% of heard words are in the agent's text, it's likely echo
-                            const heardWords = heardTextClean.split(/\s+/).filter(w => w.length > 2);
-                            if (heardWords.length > 0) {
+                        // For short utterances (1 or 2 words), never classify as echo to allow barge-in/responses (e.g. "yes", "no", "balance")
+                        const heardWords = heardTextClean.split(/\s+/).filter(w => w.length > 2);
+                        if (heardWords.length >= 3) {
+                            if (agentTextClean.includes(heardTextClean) || heardTextClean.includes(agentTextClean)) {
+                                isEcho = true;
+                            } else {
+                                // Check word overlap: if > 70% of heard words are in the agent's text, it's likely echo
                                 let matchCount = 0;
                                 heardWords.forEach(w => {
                                     if (agentTextClean.includes(w)) matchCount++;
                                 });
-                                if (matchCount / heardWords.length > 0.5) {
+                                if (matchCount / heardWords.length > 0.7) {
                                     isEcho = true;
                                 }
                             }
