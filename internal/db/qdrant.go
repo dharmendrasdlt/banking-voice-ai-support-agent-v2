@@ -1,6 +1,8 @@
 package db
 
 import (
+	"banking-voice-ai-agent/internal/telemetry"
+
 	"bytes"
 	"context"
 	"encoding/json"
@@ -134,6 +136,8 @@ func (q *QdrantManager) UpsertPoints(ctx context.Context, collection string, poi
 
 // Search queries Qdrant using vector similarity
 func (q *QdrantManager) Search(ctx context.Context, collection string, vector []float64, limit int) ([]QdrantMatch, error) {
+	ctx, span := telemetry.Step(ctx, "qdrant.search")
+	defer span.End()
 	url := fmt.Sprintf("%s/collections/%s/points/search", q.BaseURL, collection)
 
 	bodyMap := map[string]any{
@@ -175,10 +179,10 @@ func (q *QdrantManager) Search(ctx context.Context, collection string, vector []
 // SeedData sets up collections and upserts the seeded data using Ollama embeddings
 func (q *QdrantManager) SeedData(ctx context.Context, ollamaClient *ollama.Client) error {
 	log.Println("Initializing Qdrant Collections...")
-	dim := 768 // default for nomic-embed-text. Let's make it match.
+	dim := 768 // fallback for nomic-embed-text
 
-	// If using mxbai-embed-large, dimension is 1024
-	if ollamaClient.EmbedModel == "mxbai-embed-large" {
+	// bge-m3 (multilingual, the plan default) and mxbai-embed-large are 1024-dim
+	if ollamaClient.EmbedModel == "bge-m3" || ollamaClient.EmbedModel == "mxbai-embed-large" {
 		dim = 1024
 	}
 

@@ -1,6 +1,8 @@
 package db
 
 import (
+	"banking-voice-ai-agent/internal/telemetry"
+
 	"context"
 	"errors"
 	"fmt"
@@ -182,6 +184,8 @@ func (m *MongoManager) initAndSeed(ctx context.Context) error {
 
 // GetBalance gets account balance for user
 func (m *MongoManager) GetBalance(ctx context.Context, userID string) (float64, string, error) {
+	ctx, span := telemetry.Step(ctx, "bank.get_balance")
+	defer span.End()
 	var acc Account
 	err := m.DB.Collection("accounts").FindOne(ctx, bson.M{"user_id": userID}).Decode(&acc)
 	if err != nil {
@@ -195,6 +199,8 @@ func (m *MongoManager) GetBalance(ctx context.Context, userID string) (float64, 
 
 // GetTransactions gets recent N transactions for user
 func (m *MongoManager) GetTransactions(ctx context.Context, userID string, limit int64) ([]Transaction, error) {
+	ctx, span := telemetry.Step(ctx, "bank.get_transactions")
+	defer span.End()
 	opts := options.Find().SetSort(bson.D{{Key: "date", Value: -1}}).SetLimit(limit)
 	cursor, err := m.DB.Collection("transactions").Find(ctx, bson.M{"user_id": userID}, opts)
 	if err != nil {
@@ -211,6 +217,8 @@ func (m *MongoManager) GetTransactions(ctx context.Context, userID string, limit
 
 // GetDueDate gets card due date
 func (m *MongoManager) GetDueDate(ctx context.Context, userID string, cardType string) (string, error) {
+	ctx, span := telemetry.Step(ctx, "bank.get_due_date")
+	defer span.End()
 	var card Card
 	err := m.DB.Collection("cards").FindOne(ctx, bson.M{"user_id": userID, "card_type": cardType}).Decode(&card)
 	if err != nil {
@@ -224,6 +232,8 @@ func (m *MongoManager) GetDueDate(ctx context.Context, userID string, cardType s
 
 // BlockCard sets credit card status to blocked
 func (m *MongoManager) BlockCard(ctx context.Context, userID string, cardType string) (bool, error) {
+	ctx, span := telemetry.Step(ctx, "bank.block_card")
+	defer span.End()
 	res, err := m.DB.Collection("cards").UpdateOne(
 		ctx,
 		bson.M{"user_id": userID, "card_type": cardType},
@@ -237,6 +247,8 @@ func (m *MongoManager) BlockCard(ctx context.Context, userID string, cardType st
 
 // Transfer transfers money from the account and records the transaction idempotently
 func (m *MongoManager) Transfer(ctx context.Context, userID string, toAccount string, amount float64, uniqueRefNo string) (string, error) {
+	ctx, span := telemetry.Step(ctx, "bank.transfer")
+	defer span.End()
 	if uniqueRefNo == "" {
 		return "", fmt.Errorf("unique_ref_no is required")
 	}

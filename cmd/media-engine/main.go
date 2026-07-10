@@ -14,9 +14,29 @@ import (
 	"syscall"
 	"time"
 
+	"sync"
+
+	"banking-voice-ai-agent/internal/telemetry"
+
 	"github.com/gorilla/websocket"
 	"github.com/livekit/protocol/auth"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/metric"
 )
+
+var (
+	mediaMetricsOnce sync.Once
+	activeCalls      metric.Int64UpDownCounter
+	callsTotal       metric.Int64Counter
+)
+
+func initMediaMetrics() {
+	mediaMetricsOnce.Do(func() {
+		m := telemetry.Meter("media-engine")
+		activeCalls, _ = m.Int64UpDownCounter("voiceagent.active_calls")
+		callsTotal, _ = m.Int64Counter("voiceagent.calls")
+	})
+}
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
@@ -41,6 +61,11 @@ type MediaEngineServer struct {
 func main() {
 	log.Println("Starting Standalone Media Engine Service...")
 
+	tShutdown, _ := telemetry.Init(context.Background(), "media-engine")
+	defer func() { _ = tShutdown(context.Background()) }()
+	log.Printf("[Telemetry] Telemetry enabled: %t", telemetry.Enabled())
+	initMediaMetrics()
+
 	orchestratorURL := getEnv("ORCHESTRATOR_URL", "http://localhost:9083")
 	log.Printf("Target Orchestrator Service: %s", orchestratorURL)
 
@@ -48,6 +73,9 @@ func main() {
 		OrchestratorURL: orchestratorURL,
 		HTTPClient: &http.Client{
 			Timeout: 10 * time.Second,
+			// otelhttp transport: client spans + W3C trace-context propagation so
+			// each /api/final is one end-to-end trace (media -> orchestrator).
+			Transport: otelhttp.NewTransport(http.DefaultTransport),
 		},
 	}
 
@@ -115,6 +143,17 @@ func (s *MediaEngineServer) handleWebSocket(w http.ResponseWriter, r *http.Reque
 	sessionID := fmt.Sprintf("sess-%d", time.Now().Unix())
 	log.Printf("[Session %s] Customer connected directly to Media Engine", sessionID)
 
+	// Live call visibility (gauge + logs), independent of any trace.
+	logger := telemetry.Logger("media-engine")
+	callStart := time.Now()
+	activeCalls.Add(r.Context(), 1)
+	callsTotal.Add(r.Context(), 1)
+	logger.Info("call.start", "call_id", sessionID)
+	defer func() {
+		activeCalls.Add(context.Background(), -1)
+		logger.Info("call.end", "call_id", sessionID, "duration_s", time.Since(callStart).Seconds())
+	}()
+
 	// Initial greeting
 	greeting := "Hello Dharmendra, welcome back to ICICI Bank support. How can I help you today?"
 	_ = ws.WriteJSON(map[string]any{
@@ -139,8 +178,8 @@ func (s *MediaEngineServer) handleWebSocket(w http.ResponseWriter, r *http.Reque
 			go func(m ClientWSMessage) {
 				reqBody, _ := json.Marshal(map[string]string{
 					"session_id": sessionID,
-					"turn_id":     m.TurnID,
-					"text":        m.Text,
+					"turn_id":    m.TurnID,
+					"text":       m.Text,
 				})
 				resp, err := s.HTTPClient.Post(s.OrchestratorURL+"/api/partial", "application/json", bytes.NewBuffer(reqBody))
 				if err != nil {
@@ -184,8 +223,8 @@ func (s *MediaEngineServer) handleWebSocket(w http.ResponseWriter, r *http.Reque
 
 			reqBody, _ := json.Marshal(map[string]string{
 				"session_id": sessionID,
-				"turn_id":     msg.TurnID,
-				"text":        msg.Text,
+				"turn_id":    msg.TurnID,
+				"text":       msg.Text,
 			})
 			resp, err := s.HTTPClient.Post(s.OrchestratorURL+"/api/final", "application/json", bytes.NewBuffer(reqBody))
 			if err != nil {
@@ -249,8 +288,8 @@ func (s *MediaEngineServer) handleWebSocket(w http.ResponseWriter, r *http.Reque
 
 			reqBody, _ := json.Marshal(map[string]string{
 				"session_id": sessionID,
-				"turn_id":     msg.TurnID,
-				"text":        msg.Text,
+				"turn_id":    msg.TurnID,
+				"text":       msg.Text,
 			})
 			resp, err := s.HTTPClient.Post(s.OrchestratorURL+"/api/confirmation", "application/json", bytes.NewBuffer(reqBody))
 			if err != nil {

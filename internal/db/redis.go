@@ -1,6 +1,8 @@
 package db
 
 import (
+	"banking-voice-ai-agent/internal/telemetry"
+
 	"context"
 	"encoding/json"
 	"fmt"
@@ -35,6 +37,8 @@ func NewRedisManager(addr string) (*RedisManager, error) {
 
 // GetSessionContext fetches conversation context from Redis
 func (r *RedisManager) GetSessionContext(ctx context.Context, sessionID string) ([]ollama.ChatMessage, error) {
+	ctx, span := telemetry.Step(ctx, "redis.get_session")
+	defer span.End()
 	key := fmt.Sprintf("session:%s:context", sessionID)
 	data, err := r.Client.Get(ctx, key).Result()
 	if err == redis.Nil {
@@ -52,6 +56,8 @@ func (r *RedisManager) GetSessionContext(ctx context.Context, sessionID string) 
 
 // SaveSessionContext saves the conversation history context to Redis with a TTL of 1 hour
 func (r *RedisManager) SaveSessionContext(ctx context.Context, sessionID string, messages []ollama.ChatMessage) error {
+	ctx, span := telemetry.Step(ctx, "redis.save_session")
+	defer span.End()
 	key := fmt.Sprintf("session:%s:context", sessionID)
 	data, err := json.Marshal(messages)
 	if err != nil {
@@ -73,6 +79,8 @@ func (r *RedisManager) ClearSessionContext(ctx context.Context, sessionID string
 
 // AddAuditLog appends an event to the audit stream (stand-in for Kafka)
 func (r *RedisManager) AddAuditLog(ctx context.Context, turnID string, eventName string, payload map[string]any) error {
+	ctx, span := telemetry.Step(ctx, "redis.audit")
+	defer span.End()
 	streamKey := "audit_log_stream"
 
 	// Marshal payload to string
@@ -82,10 +90,10 @@ func (r *RedisManager) AddAuditLog(ctx context.Context, turnID string, eventName
 	}
 
 	values := map[string]interface{}{
-		"turn_id":    turnID,
-		"event":      eventName,
-		"payload":    string(payloadJSON),
-		"timestamp":  time.Now().Format(time.RFC3339Nano),
+		"turn_id":   turnID,
+		"event":     eventName,
+		"payload":   string(payloadJSON),
+		"timestamp": time.Now().Format(time.RFC3339Nano),
 	}
 
 	err = r.Client.XAdd(ctx, &redis.XAddArgs{

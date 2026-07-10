@@ -1,41 +1,57 @@
-# Observability
+# Observability (v2)
 
 Traces/APM, logs, and metrics via **OpenTelemetry (OTLP)**, viewed in a
-**Datadog-like local UI** (Grafana). The backends live in a **separate reusable
-repo** (`../observability-stack`) — this app only owns instrumentation.
+**Datadog-like local UI** (Grafana). Backends live in the **separate reusable
+repo** `../observability-stack`; this app only owns instrumentation
+(`internal/telemetry`).
 
 ## The split
-- **`observability-stack` repo** = the backends + UI (Grafana `otel-lgtm`:
-  Collector + Tempo + Loki + Prometheus + Grafana). Reusable by any project.
-- **This app** = OTel instrumentation (`internal/telemetry`) that exports OTLP to
-  `localhost:4317`. No-op unless `OTEL_EXPORTER_OTLP_ENDPOINT` is set, so the app
-  runs fine with the stack down.
+- **`observability-stack` repo** = backends + UI (Grafana `otel-lgtm`: Collector
+  + Tempo + Loki + Prometheus + Grafana). Reusable by any project.
+- **This app** = OTel instrumentation exporting OTLP to `localhost:4317`. No-op
+  unless `OTEL_EXPORTER_OTLP_ENDPOINT` is set; exporters are lazy, so a down
+  collector never blocks or crashes the app. When disabled, `Step` still logs to
+  stderr (JSON) so every step is visible locally.
 
-## What's instrumented (orchestrator)
-- **Traces:** every `/query` is a server span (otelhttp) with a child `turn` span;
-  MCP/Ollama/Cassandra calls nest under it → trace waterfall in Tempo.
-- **Metrics:** `voiceagent.turns` counter, labeled `dispatch=action|faq|llm`.
-- **Logs:** structured slog bridged to OTLP → Loki, auto-correlated to traces by
-  `trace_id`.
+## Design: per-turn traces, not one call-long trace
+A call can last minutes; a single call-length span would export only at hangup —
+you'd see nothing mid-call. So **each turn is its own short trace** (exported the
+moment it completes), correlated by `call_id`/`session_id`. Live visibility of an
+**ongoing** call comes from **logs + metrics**, not from waiting for a trace to
+close.
+
+## What's instrumented (end-to-end)
+- **Media engine:** the HTTP client to the orchestrator uses `otelhttp.NewTransport`,
+  so each `POST /api/final` is a client span that **propagates** W3C trace context
+  — the orchestrator's server + `turn` spans nest under it → one per-turn trace
+  across services. Live `call.start` / `call.end` logs + a `voiceagent.active_calls`
+  gauge (no call-length span).
+- **Orchestrator / warm supervisor:** `otelhttp.NewHandler` on every `/api/*`
+  endpoint; a `turn` span; dispatch counter `voiceagent.turns{dispatch=action|faq|llm}`;
+  warm-supervisor events via `LogEvent` (halt_point, cache_probe, dispatch, …).
+- **Every step = span + trace-correlated log** via `telemetry.Step(...)`:
+  `ollama.embedding`, `ollama.chat`, `qdrant.search`, `redis.get_session`,
+  `redis.save_session`, `redis.audit`, `bank.get_balance` / `.get_transactions` /
+  `.get_due_date` / `.block_card` / `.transfer`, `mcp.<tool>`, `cassandra.log_turn`
+  — each in **both** Tempo (traces) and Loki (logs).
 
 ## Run + view
 ```bash
-# 1. start the stack (separate repo)
+# 1. start the reusable stack
 cd ../observability-stack && docker compose up -d      # Grafana at :3000
 
 # 2. run the app pointed at it
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
-# start orchestrator (+ media engine, mcp) as usual
+# start orchestrator + media engine as usual
 ```
-Grafana → **Explore**: Tempo (traces/APM + service map), Loki (logs, jump to
-trace by `trace_id`), Prometheus (metrics / dashboards).
+Grafana → **Explore**: Tempo (per-turn trace waterfalls + service map), Loki
+(step logs; jump log⇄trace by `trace_id`; tail `call.start`/`turn` live),
+Prometheus (`active_calls` gauge, `voiceagent.turns`, latencies).
 
 ## Data & retention
-All telemetry stored on local disk in the stack's Docker volume (nothing leaves
-the machine). Each backend has its own retention; prod would use object storage.
+Telemetry is stored on local disk in the stack's Docker volume (nothing leaves
+the machine); prod would point Tempo/Loki at object storage.
 
 ## Still open
-- Instrument the **media engine** + **MCP** too (only the orchestrator is wired),
-  so a trace spans STT → dispatch → bank → TTS end-to-end.
-- **Keep PII out of plain debug logs** (audit stream legitimately carries txn
-  detail; general `log.Printf` should not).
+- **Keep PII out of plain `log.Printf`** (audit stream legitimately carries txn
+  detail; general debug logs should not).

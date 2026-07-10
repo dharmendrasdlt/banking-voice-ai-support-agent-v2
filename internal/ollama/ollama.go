@@ -1,6 +1,8 @@
 package ollama
 
 import (
+	"banking-voice-ai-agent/internal/telemetry"
+
 	"bytes"
 	"context"
 	"encoding/json"
@@ -22,9 +24,9 @@ type ChatMessage struct {
 }
 
 type ChatRequest struct {
-	Model    string        `json:"model"`
-	Messages []ChatMessage `json:"messages"`
-	Stream   bool          `json:"stream"`
+	Model    string         `json:"model"`
+	Messages []ChatMessage  `json:"messages"`
+	Stream   bool           `json:"stream"`
 	Options  map[string]any `json:"options,omitempty"`
 }
 
@@ -58,6 +60,8 @@ func NewClient(baseURL, chatModel, embedModel string) *Client {
 
 // GetEmbedding gets the text embedding vector from Ollama
 func (c *Client) GetEmbedding(ctx context.Context, text string) ([]float64, error) {
+	ctx, span := telemetry.Step(ctx, "ollama.embedding")
+	defer span.End()
 	reqBody, err := json.Marshal(EmbedRequest{
 		Model:  c.EmbedModel,
 		Prompt: text,
@@ -95,6 +99,8 @@ func (c *Client) GetEmbedding(ctx context.Context, text string) ([]float64, erro
 // If stream is false, it returns the single completion string.
 // Context cancellation will abort the Ollama request mid-flight.
 func (c *Client) Chat(ctx context.Context, messages []ChatMessage, stream bool, streamChan chan<- string) (string, error) {
+	ctx, span := telemetry.Step(ctx, "ollama.chat")
+	defer span.End()
 	reqBody, err := json.Marshal(ChatRequest{
 		Model:    c.ChatModel,
 		Messages: messages,

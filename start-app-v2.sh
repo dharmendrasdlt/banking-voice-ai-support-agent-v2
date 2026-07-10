@@ -95,18 +95,18 @@ echo -e "${GREEN}✓ Ollama is running.${NC}"
 echo -e "${BLUE}Verifying local models...${NC}"
 models=$(ollama list)
 
-if [[ ! "$models" =~ "nomic-embed-text" ]]; then
-    echo -e "${YELLOW}Pulling embeddings model (nomic-embed-text)... This might take a minute.${NC}"
-    ollama pull nomic-embed-text
+if [[ ! "$models" =~ "bge-m3" ]]; then
+    echo -e "${YELLOW}Pulling embeddings model (bge-m3)... This might take a minute.${NC}"
+    ollama pull bge-m3
 else
-    echo -e "${GREEN}✓ Embeddings model (nomic-embed-text) exists.${NC}"
+    echo -e "${GREEN}✓ Embeddings model (bge-m3) exists.${NC}"
 fi
 
-if [[ ! "$models" =~ "gemma2:2b" ]]; then
-    echo -e "${YELLOW}Pulling chat LLM model (gemma2:2b)... This might take a minute.${NC}"
-    ollama pull gemma2:2b
+if [[ ! "$models" =~ "qwen2.5:7b-instruct" ]]; then
+    echo -e "${YELLOW}Pulling chat LLM model (qwen2.5:7b-instruct)... This might take a minute.${NC}"
+    ollama pull qwen2.5:7b-instruct
 else
-    echo -e "${GREEN}✓ Chat model (gemma2:2b) exists.${NC}"
+    echo -e "${GREEN}✓ Chat model (qwen2.5:7b-instruct) exists.${NC}"
 fi
 
 # 6. Start Docker Compose Stack with Multi-Orchestrator replicas and Nginx Load Balancer

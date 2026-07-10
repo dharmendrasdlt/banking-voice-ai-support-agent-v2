@@ -50,8 +50,8 @@ func main() {
 	cassandraHostsStr := getEnv("CASSANDRA_HOSTS", "localhost")
 	cassandraHosts := strings.Split(cassandraHostsStr, ",")
 	ollamaURL := getEnv("OLLAMA_URL", "http://localhost:11434")
-	chatModel := getEnv("CHAT_MODEL", "gemma2:2b")
-	embedModel := getEnv("EMBED_MODEL", "nomic-embed-text:latest")
+	chatModel := getEnv("CHAT_MODEL", "qwen2.5:7b-instruct")
+	embedModel := getEnv("EMBED_MODEL", "bge-m3")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

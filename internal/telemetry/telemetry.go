@@ -83,6 +83,14 @@ func Logger(name string) *slog.Logger {
 	return otelslog.NewLogger(name)
 }
 
+// Step starts a span AND emits a trace-correlated log line for the same step,
+// so every execution shows up in both Tempo (traces) and Loki (logs).
+func Step(ctx context.Context, name string, opts ...trace.SpanStartOption) (context.Context, trace.Span) {
+	ctx, span := otel.Tracer("app").Start(ctx, name, opts...)
+	Logger("app").InfoContext(ctx, name)
+	return ctx, span
+}
+
 // Tracer returns a named tracer from the global provider.
 func Tracer(name string) trace.Tracer { return otel.Tracer(name) }
 

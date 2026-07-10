@@ -1,6 +1,8 @@
 package mcp
 
 import (
+	"banking-voice-ai-agent/internal/telemetry"
+
 	"context"
 	"encoding/json"
 	"fmt"
@@ -19,6 +21,8 @@ func NewBankingMCPServer(mongoManager *db.MongoManager) *BankingMCPServer {
 
 // CallTool routes and executes a tool call, returning the response as a string
 func (s *BankingMCPServer) CallTool(ctx context.Context, name string, args map[string]any) (string, error) {
+	ctx, span := telemetry.Step(ctx, "mcp."+name)
+	defer span.End()
 	log.Printf("[MCP] Calling tool '%s' with arguments: %+v", name, args)
 
 	userID, ok := args["user_id"].(string)
@@ -99,10 +103,10 @@ func (s *BankingMCPServer) CallTool(ctx context.Context, name string, args map[s
 		}
 
 		result := map[string]any{
-			"user_id":   userID,
-			"card":      cardType,
-			"due_date":  dueDate,
-			"text":      fmt.Sprintf("The payment due date for your %s card is %s.", cardType, dueDate),
+			"user_id":  userID,
+			"card":     cardType,
+			"due_date": dueDate,
+			"text":     fmt.Sprintf("The payment due date for your %s card is %s.", cardType, dueDate),
 		}
 		resBytes, _ := json.Marshal(result)
 		return string(resBytes), nil

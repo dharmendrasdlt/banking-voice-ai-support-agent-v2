@@ -1,6 +1,8 @@
 package db
 
 import (
+	"banking-voice-ai-agent/internal/telemetry"
+
 	"context"
 	"fmt"
 	"log"
@@ -83,6 +85,8 @@ func (c *CassandraManager) Close() {
 }
 
 func (c *CassandraManager) LogTurn(ctx context.Context, userID, conversationID string, seq int, role, transcript, intent, action, result string) error {
+	ctx, span := telemetry.Step(ctx, "cassandra.log_turn")
+	defer span.End()
 	query := `INSERT INTO conversation_history (user_id, conversation_id, turn_seq, ts, role, transcript, intent, action, result) 
 	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	return c.Session.Query(query, userID, conversationID, seq, time.Now(), role, transcript, intent, action, result).WithContext(ctx).Exec()
