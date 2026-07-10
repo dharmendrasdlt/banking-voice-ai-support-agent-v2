@@ -1087,6 +1087,8 @@
         }
 
         let shouldBeListening = false;
+        let isTTSPlaying = false;
+        let ttsEndTime = 0;
 
         function resumeSpeechIfNeeded() {
             if (shouldBeListening && recognition && !isListening) {
@@ -1096,6 +1098,35 @@
                     console.warn("[STT] Failed to auto-resume recognition:", e);
                 }
             }
+        }
+
+        // Phonetically transliterate Devanagari Hindi characters to clean Latin representation (Hinglish/English characters)
+        // for accurate echo cancellation against Web Speech API transcripts.
+        function DevanagariToLatin(text) {
+            const mapping = {
+                'अ': 'a', 'आ': 'a', 'इ': 'i', 'ई': 'i', 'उ': 'u', 'ऊ': 'u',
+                'ऋ': 'ri', 'ए': 'e', 'ऐ': 'ai', 'ओ': 'o', 'औ': 'au',
+                'क': 'k', 'ख': 'kh', 'ग': 'g', 'घ': 'gh', 'ङ': 'n',
+                'च': 'ch', 'छ': 'chh', 'ज': 'j', 'झ': 'jh', 'ञ': 'n',
+                'ट': 't', 'ठ': 'th', 'ड': 'd', 'ढ': 'dh', 'ण': 'n',
+                'त': 't', 'थ': 'th', 'द': 'd', 'ध': 'dh', 'न': 'n',
+                'प': 'p', 'फ': 'ph', 'ब': 'b', 'भ': 'bh', 'म': 'm',
+                'य': 'y', 'र': 'r', 'ल': 'l', 'व': 'v', 'श': 'sh',
+                'ष': 'sh', 'स': 's', 'ह': 'h',
+                'ा': 'a', 'ि': 'i', 'ी': 'i', 'ु': 'u', 'ू': 'u',
+                'ृ': 'ri', 'े': 'e', 'ै': 'ai', 'ो': 'o', 'ौ': 'au',
+                'ं': 'n', 'ः': 'h', 'ँ': 'n', '़': ''
+            };
+            
+            let result = '';
+            for (let char of text) {
+                if (mapping[char] !== undefined) {
+                    result += mapping[char];
+                } else if (char >= 'a' && char <= 'z' || char >= 'A' && char <= 'Z' || char >= '0' && char <= '9' || char === ' ') {
+                    result += char.toLowerCase();
+                }
+            }
+            return result.replace(/\s+/g, ' ').trim();
         }
 
         // Web Speech API STT
@@ -1149,8 +1180,8 @@
                 micBtn.className = 'voice-circle-inner';
                 visualWaveform.className = 'waveform';
 
-                // Auto-restart if we are in active voice mode (continuous listening / barge-in support)
-                if (shouldBeListening) {
+                // Only auto-restart when agent is NOT speaking — prevents mic from picking up TTS output
+                if (shouldBeListening && !isTTSPlaying) {
                     try {
                         console.log("[STT] Auto-restarting speech recognition...");
                         recognition.start();
@@ -1172,35 +1203,59 @@
                     }
                 }
 
-                // Active Barge-in / Interruption: Abort agent audio immediately when user starts speaking!
-                if (interimTranscript.trim() || finalTranscript.trim()) {
-                    const speechText = (interimTranscript || finalTranscript).trim().toLowerCase();
+                const speechText = (interimTranscript || finalTranscript).trim();
+                if (!speechText) return;
+
+                // Echo filter check: if the heard text is part of what the agent is currently speaking (or was speaking recently due to STT delay)
+                let isEcho = false;
+                const isSpeakingRecently = isTTSPlaying || (activeAudio !== null) || ('speechSynthesis' in window && window.speechSynthesis.speaking) || (Date.now() - ttsEndTime < 2500);
+                
+                if (isSpeakingRecently && currentlyPlayingItem && currentlyPlayingItem.text) {
+                    const agentLatin = DevanagariToLatin(currentlyPlayingItem.text);
+                    const heardLatin = DevanagariToLatin(speechText);
                     
-                    let interrupted = false;
-                    if (activeAudio) {
-                        activeAudio.pause();
-                        activeAudio = null;
-                        console.log("[Barge-in] Stopped agent audio playback because user spoke.");
-                        sendClientLog('info', 'barge_in', 'Customer interrupted agent audio playback.');
-                        interrupted = true;
+                    const heardWords = heardLatin.split(/\s+/).filter(w => w.length > 2);
+                    if (heardWords.length >= 3) {
+                        if (agentLatin.includes(heardLatin) || heardLatin.includes(agentLatin)) {
+                            isEcho = true;
+                        } else {
+                            // Check word overlap
+                            const agentWords = agentLatin.split(/\s+/).filter(w => w.length > 2);
+                            let matchCount = 0;
+                            heardWords.forEach(w => {
+                                if (agentWords.includes(w)) matchCount++;
+                            });
+                            if (matchCount / heardWords.length > 0.6) {
+                                isEcho = true;
+                            }
+                        }
                     }
-                    if ('speechSynthesis' in window && window.speechSynthesis.speaking) {
-                        window.speechSynthesis.cancel();
-                        console.log("[Barge-in] Stopped native TTS speech because user spoke.");
-                        sendClientLog('info', 'barge_in', 'Customer interrupted agent native speech.');
-                        interrupted = true;
-                    }
-                    if (interrupted && currentlyPlayingItem) {
-                        console.log("[Barge-in] Prepending interrupted chunk back to queue:", currentlyPlayingItem.text);
-                        audioQueue.unshift(currentlyPlayingItem);
-                        currentlyPlayingItem = null;
-                    }
+                }
+
+                if (isEcho) {
+                    console.log("[Barge-in] Filtered out echo:", speechText);
+                    return; // Ignore echo entirely and do not send to backend
+                }
+
+                // If it is NOT echo, and the agent is actively speaking, trigger barge-in interruption!
+                const isSpeakingActive = isTTSPlaying || (activeAudio !== null) || ('speechSynthesis' in window && window.speechSynthesis.speaking);
+                if (isSpeakingActive) {
+                    audioQueue = [];
+                    isPlayingQueue = false;
+                    currentlyPlayingItem = null;
+                    if (activeAudio) { activeAudio.pause(); activeAudio = null; }
+                    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+                    isTTSPlaying = false;
+                    
+                    console.log("[Barge-in] Stopped agent speech because of user speech:", speechText);
+                    sendClientLog('info', 'barge_in', 'Agent interrupted by user.');
+                    
+                    // Do NOT abort recognition here! Let the user's speech continue to transcribe normally so it reaches finalTranscript and is sent to the backend!
                 }
 
                 if (interimTranscript) {
                     appendChatMessage('user', interimTranscript, true);
-                    
-                    // Send stable partials to backend for speculative warming (Branch A) + Cache Probe (Branch B)
+
                     if (socket && socket.readyState === WebSocket.OPEN) {
                         socket.send(JSON.stringify({
                             type: 'partial_transcript',
@@ -1213,11 +1268,9 @@
                 if (finalTranscript) {
                     const cleanFinal = finalTranscript.trim();
                     appendChatMessage('user', cleanFinal, false);
-                    
-                    // Mark the start of post-speech processing
+
                     utteranceStartTime = Date.now();
 
-                    // Send authoritative final transcript to backend for dispatch
                     if (socket && socket.readyState === WebSocket.OPEN) {
                         socket.send(JSON.stringify({
                             type: 'final_transcript',
@@ -1499,8 +1552,12 @@
             if (audioQueue.length === 0) {
                 isPlayingQueue = false;
                 activeAudio = null;
-                currentlyPlayingItem = null;
-                resumeSpeechIfNeeded(); // Resume microphone once all chunks finish speaking
+                ttsEndTime = Date.now();
+                // Brief delay to let TTS audio fade from the room before reopening the mic
+                setTimeout(() => {
+                    isTTSPlaying = false;
+                    resumeSpeechIfNeeded();
+                }, 400);
                 return;
             }
 
@@ -1613,6 +1670,9 @@
                 window.speechSynthesis.cancel();
             }
 
+            // Flag that TTS is active so onresult knows to discard any echo it picks up
+            isTTSPlaying = true;
+
             // Stash original greeting paragraph as pending welcome fallback if user hasn't clicked yet
             if (!userInteracted) {
                 pendingWelcomeText = text;
@@ -1640,13 +1700,14 @@
             if (isHalted) return;
             if (isListening) {
                 shouldBeListening = false;
+                isTTSPlaying = false;
                 recognition.stop();
             } else {
                 shouldBeListening = true;
+                isTTSPlaying = false; // allow mic to run even if TTS was mid-play (intentional barge-in)
                 if (!recognition) setupSpeechRecognition();
-                if (recognition) recognition.start();
-                
-                // Manually stop active agent playback on user action
+
+                // Stop active agent playback on user tap
                 if (activeAudio) {
                     activeAudio.pause();
                     activeAudio = null;
@@ -1654,6 +1715,9 @@
                 if ('speechSynthesis' in window) {
                     window.speechSynthesis.cancel();
                 }
+                audioQueue = [];
+
+                if (recognition) recognition.start();
             }
         });
 
