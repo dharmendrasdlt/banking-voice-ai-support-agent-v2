@@ -280,7 +280,7 @@ func (m *MongoManager) Transfer(ctx context.Context, userID string, toAccount st
 	}
 
 	// Generate transaction payment reference ID
-	paymentRefNo := fmt.Sprintf("PAY-ICICI-%d", time.Now().UnixNano()/1000)
+	paymentRefNo := fmt.Sprintf("PAY-REF-%d", time.Now().UnixNano()/1000)
 
 	// Insert transaction history
 	txsColl := m.DB.Collection("transactions")

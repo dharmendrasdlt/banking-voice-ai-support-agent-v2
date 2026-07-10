@@ -265,7 +265,7 @@ func (q *QdrantManager) SeedData(ctx context.Context, ollamaClient *ollama.Clien
 		// English FAQs
 		{
 			Question: "How do I reset my net banking password?",
-			Answer:   "To reset your ICICI Net Banking password, go to the ICICI login page, click 'Forgot Password', enter your User ID, and verify with the OTP sent to your registered mobile number.",
+			Answer:   "To reset your Net Banking password, go to the login page, click 'Forgot Password', enter your User ID, and verify with the OTP sent to your registered mobile number.",
 		},
 		{
 			Question: "What are the bank branch working hours?",
@@ -273,25 +273,25 @@ func (q *QdrantManager) SeedData(ctx context.Context, ollamaClient *ollama.Clien
 		},
 		{
 			Question: "How do I apply for a home loan?",
-			Answer:   "You can apply for an ICICI Home Loan online via our website, by visiting any ICICI Bank branch, or by calling our customer care number.",
+			Answer:   "You can apply for a Home Loan online via our website, by visiting any bank branch, or by calling our customer care number.",
 		},
 		{
 			Question: "What is the interest rate on savings account?",
-			Answer:   "ICICI Bank savings account interest rates start at 3.0% per annum for balances below 50 lakhs and 3.5% per annum for balances of 50 lakhs and above.",
+			Answer:   "Our savings account interest rates start at 3.0% per annum for balances below 50 lakhs and 3.5% per annum for balances of 50 lakhs and above.",
 		},
 		{
 			Question: "How do I contact customer care?",
-			Answer:   "You can contact ICICI Bank customer care 24/7 at 1800 1080 or email support@icicibank.com.",
+			Answer:   "You can contact our customer care 24/7 at 1800 1080 or email support@bank.com.",
 		},
 
 		// Hinglish / Hindi FAQs
 		{
 			Question: "net banking password reset kaise kare",
-			Answer:   "ICICI नेट बैंकिंग पासवर्ड रीसेट करने के लिए, लॉगिन पेज पर जाएं, 'Forgot Password' पर क्लिक करें, यूजर आईडी डालें, और अपने मोबाइल पर प्राप्त OTP से सत्यापित करें।",
+			Answer:   "नेट बैंकिंग पासवर्ड रीसेट करने के लिए, लॉगिन पेज पर जाएं, 'Forgot Password' पर क्लिक करें, यूजर आईडी डालें, और अपने मोबाइल पर प्राप्त OTP से सत्यापित करें।",
 		},
 		{
 			Question: "नेट बैंकिंग पासवर्ड कैसे रीसेट करें?",
-			Answer:   "ICICI नेट बैंकिंग पासवर्ड रीसेट करने के लिए, लॉगिन पेज पर जाएं, 'Forgot Password' पर क्लिक करें, यूजर आईडी डालें, और अपने मोबाइल पर प्राप्त OTP से सत्यापित करें।",
+			Answer:   "नेट बैंकिंग पासवर्ड रीसेट करने के लिए, लॉगिन पेज पर जाएं, 'Forgot Password' पर क्लिक करें, यूजर आईडी डालें, और अपने मोबाइल पर प्राप्त OTP से सत्यापित करें।",
 		},
 		{
 			Question: "bank khulne ka samay kya hai",
@@ -303,11 +303,11 @@ func (q *QdrantManager) SeedData(ctx context.Context, ollamaClient *ollama.Clien
 		},
 		{
 			Question: "customer care number kya hai",
-			Answer:   "आप 24/7 हमारे ग्राहक सेवा (customer care) नंबर 1800 1080 पर संपर्क कर सकते हैं या support@icicibank.com पर ईमेल लिख सकते हैं।",
+			Answer:   "आप 24/7 हमारे ग्राहक सेवा (customer care) नंबर 1800 1080 पर संपर्क कर सकते हैं या support@bank.com पर ईमेल लिख सकते हैं।",
 		},
 		{
 			Question: "कस्टमर केयर से कैसे संपर्क करें?",
-			Answer:   "आप 24/7 हमारे ग्राहक सेवा (customer care) नंबर 1800 1080 पर संपर्क कर सकते हैं या support@icicibank.com पर ईमेल लिख सकते हैं।",
+			Answer:   "आप 24/7 हमारे ग्राहक सेवा (customer care) नंबर 1800 1080 पर संपर्क कर सकते हैं या support@bank.com पर ईमेल लिख सकते हैं।",
 		},
 	}
 

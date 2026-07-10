@@ -326,7 +326,7 @@ bank call. **This is not a knowledge base and there is no RAG.**
   template (see §5a). *"What's my balance?"* / *"what's left in my account?"* map
   to the same **balance** intent.
 - **Informational / FAQ index (fallback):** canonical questions with `{ answer }`,
-  **seeded from ICICI Bank's public documentation** (help-centre / FAQ pages).
+  **seeded from the bank's public documentation** (help-centre / FAQ pages).
   Informational only — no user data. *Rate/fee figures are time-varying and go
   stale; don't treat seeded numbers as authoritative (see §6).*
 
@@ -354,15 +354,15 @@ calls**. The agent never persists this data. (Local stand-in for the production
 - **MCP tools** (each takes an injected `user_id` from the authenticated session,
   never from the query): `get_balance(user_id)`, `get_transactions(user_id, n)`,
   `get_due_date(user_id, card)`, `block_card(user_id, card)` [write],
-  `transfer(user_id, to, amount, idempotency_key)` [**write / money-movement**].
+  `transfer(user_id, to, amount, unique_ref_no)` [**write / money-movement**].
 - **MongoDB collections:** `users`, `accounts`, `transactions`, `cards`.
-- **Idempotency:** `transfer` requires `idempotency_key`; MongoDB enforces a
+- **Idempotency:** `transfer` requires `unique_ref_no`; MongoDB enforces a
   **unique index** on it — a retry/reconciliation is a no-op returning the
   original result (this is what makes the money-movement rule in
   `docs/FAILOVER.md` work).
 - **Identity:** no auth locally (out of scope) — a **fixed mock `user_id`** per
   session is injected into every MCP call.
-- Informational content (FAQs, ICICI docs) does **not** use this path — it is
+- Informational content (FAQs, bank docs) does **not** use this path — it is
   seeded into the Qdrant FAQ index (§5 / Phase 2). Only user-specific/transactional
   data uses the Banking MCP server.
 
@@ -378,7 +378,7 @@ calls**. The agent never persists this data. (Local stand-in for the production
 - **LLM system prompt:** author the **deflector/guardrail prompt** per §6 /
   `docs/HALLUCINATION_GUARDRAILS.md`.
 - **Cache seed:** ~5 action intents (balance, transactions, transfer, card block,
-  due date) + ~5–10 FAQs from ICICI public docs; embed + upsert via a bootstrap
+  due date) + ~5–10 FAQs from bank public docs; embed + upsert via a bootstrap
   script.
 
 ### 5c. Dialog Design & Language Support
@@ -397,7 +397,7 @@ calls**. The agent never persists this data. (Local stand-in for the production
     *   **A:** **Deterministic slots** are filled utilizing localized templated prompts, keeping the LLM off the execution/money path.
 *   **Q:** How should a money-movement confirmation be done before executing a transfer?
     *   **A:** A **templated confirm** dialogue (localized) is used.
-*   **Q:** ICICI is India-based. What language(s) should the scaffold support (STT/TTS/seed content)?
+*   **Q:** The bank is India-based. What language(s) should the scaffold support (STT/TTS/seed content)?
     *   **A:** **Multilingual** (English + Hindi) support is required.
 
 ---

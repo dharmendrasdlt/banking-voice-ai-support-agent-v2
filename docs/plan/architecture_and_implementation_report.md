@@ -88,7 +88,7 @@ Open [http://localhost:8080](http://localhost:8080) in your web browser (Safari 
 *   **Cache Hit (Action):** Say *"what is my account balance?"* or *"check my balance please"*.
     > [!NOTE]
     > Notice the telemetry logs: `cache_probe` executes on partial tokens. The instant you say *"what is my balance"*, the score jumps past `EXTREME (0.96)`. The `halt_point` event fires instantly, canceling the background warming branch.
-*   **Cache Hit (FAQ):** Ask *"what are the branch opening hours?"*. The final dispatch routes directly to the FAQ collection, returning the correct ICICI operating schedule.
+*   **Cache Hit (FAQ):** Ask *"what are the branch opening hours?"*. The final dispatch routes directly to the FAQ collection, returning the correct bank operating schedule.
 *   **Mutating Transaction (Confirmation & Idempotency):** Say *"transfer 500 to account 987654"*.
     > [!IMPORTANT]
     > Mutating actions require confirmation. The agent will speak *"Please confirm: Do you want to transfer 500.00 INR to account 987654?"* and prompt you. Say *"yes"* or click **Confirm**. The transaction executes idempotently on MongoDB, and the Core Banking portal on the left instantly updates your balance to **₹4,067.89**!

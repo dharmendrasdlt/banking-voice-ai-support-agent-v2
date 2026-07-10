@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==============================================================================
-#  ICICI Voice AI Support Agent - Clean Teardown Script
+#  Voice AI Support Agent - Clean Teardown Script
 # ==============================================================================
 set -e
 

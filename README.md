@@ -1,4 +1,4 @@
-# ICICI Voice AI Support Agent (v2)
+# Multilingual Voice AI Banking Support Agent (v2)
 
 A production-grade, low-latency, multilingual Voice AI banking agent built in Go. It supports conversational state management (Turn Supervisor), slot-filling parameter collection, semantic caching, and strict transaction safety (using client reference numbers for de-duplication).
 
