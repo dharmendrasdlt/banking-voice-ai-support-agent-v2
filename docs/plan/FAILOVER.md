@@ -132,35 +132,41 @@ succeeded and you tell them to retry, **they** cause the double-transfer.
 
 The rule:
 
-> **Money-movement writes are never auto-retried.** On error/failover, **resolve
-> the outcome with a read**, then tell the customer the truth:
+> **Money-movement writes are never *blindly* re-sent.** On error/failover,
+> resolve the outcome, then tell the customer the truth:
 > - **Deterministic failure** returned by the bank (insufficient funds, recipient
 >   not found, invalid account) → **the money definitely did not move.** Report it
 >   plainly — these messages are clear and useful, so relay them to the customer.
 > - **Committed** → confirm.
 > - **Indeterminate** (timeout / bank unreachable / no clear result) → **do not
->   assert failure.** Reconcile with a read (below); if still unresolved,
->   **escalate to a human**. **Never tell the customer to "try again"** — that
->   relocates the double-execution risk to them.
+>   assert failure.** Reconcile by the **unique reference** (below); if still
+>   unresolved, **escalate to a human**. **Never tell the customer to "try
+>   again"** — that relocates the risk to them.
 
-### How you reconcile — by reading the ledger (we do NOT control the bank)
+### Reconcile by the client payment reference (`unique_ref_no`)
 
-We deliberately **do not use idempotency keys.** A real bank is an external system
-we don't control; assuming it stores/dedupes on a client key is a false safety
-net, and many core-banking transfer APIs don't. So reconciliation is **bank-API
-agnostic**: on an indeterminate outcome, **read the account's recent transactions
-and match by attributes** — amount + recipient + a tight time window. The bank
-always *has* the record; you match it rather than key into it. Fallback:
-**settlement / reconciliation files** (end-of-day batch, not real-time).
+Every transfer carries a **client-generated payment reference** — Indian bank APIs
+mandate this and **dedupe on it**: e.g. ICICI `UniqueRefNo`/`PaymentRefNo`, HDFC/
+Axis `ReqRefId`/`clientTxnId`, UPI (NPCI) `txnId`/`custRef`. A repeat of the same
+reference returns a **"Duplicate transaction"** instead of executing again.
 
-Because there is no key-based dedup, **"never auto-retry" is the only protection
-against a double transfer** — reconciliation must be a **read** (ledger match),
-never a re-send.
+Because the reference is **client-generated *before* the call**, you still hold it
+even if the response is lost. So on an indeterminate outcome you can safely:
 
-> **Scaffold note:** the local MCP + MongoDB "bank" exists only to demonstrate the
-> end-to-end flow — it does **not** mean we control a real bank. The transfer path
-> carries no idempotency key in the scaffold or in production; the ledger-read
-> match is the portable reconciliation path everywhere.
+- **Re-submit with the *same* `unique_ref_no`** — if it had committed, the bank
+  replies "Duplicate transaction" (→ it succeeded, confirm); if it hadn't, it now
+  executes. Either way, **no double transfer** — the bank's dedup guarantees it.
+- Or **query by the reference** if the bank exposes a status lookup.
+
+The one thing you must never do is **re-submit with a *new* reference** — that
+bypasses dedup and can double-charge. So: same ref = safe reconcile; new ref =
+forbidden.
+
+> **Scaffold note:** the local MCP + MongoDB "bank" simulates this — a unique index
+> on `unique_ref_no` rejects a repeat as a duplicate. It exists to demonstrate the
+> real flow; it does not mean we control a real bank. Ledger-attribute matching
+> (amount + recipient + time) remains a fallback for any downstream that lacks
+> reference lookup.
 
 ## B4. Announce success only after the action confirms
 
@@ -240,9 +246,9 @@ take the first). This is the clean contrast to Part B's "never retry a write."
   implemented. Redis Streams are only a local stand-in for the async/durable log.
 - **Build in the scaffold anyway (cheap, load-bearing later):**
   1. **Statelessness** — keep orchestrator state out of memory (Redis only).
-  2. **Confirm-before-execute + never-auto-retry** on money movement, and
-     **reconcile by ledger read** (amount + recipient + time) — no idempotency
-     keys, since we don't control the bank.
+  2. **Confirm-before-execute + a client `unique_ref_no`** on every transfer
+     (generated up front), so reconciliation by the bank's duplicate-detection is
+     possible from day one; **never re-send with a new reference.**
 - **Production:** Redis stream = media-engine failover buffer; Kafka = durable
   history/audit log; L4 edge + L7/media-aware relay; many stateless orchestrator
   instances. See `production-architecture.drawio.svg`.
@@ -258,7 +264,8 @@ take the first). This is the clean contrast to Part B's "never retry a write."
   instance; the real work is **side-effect safety + turn checkpointing**.
 - **STT / TTS** (stateless, no side effects): the benign tier — re-route +
   recompute + resume-at-position; safe to retry or even hedge.
-- **Money movement: never auto-retry.** Surface deterministic bank errors
+- **Money movement: never blindly re-send.** Surface deterministic bank errors
   (insufficient funds, invalid account) to the customer; on indeterminate
-  outcomes reconcile by **matching the ledger** (amount + recipient + time) — no
-  idempotency keys — and **escalate rather than tell them to retry**.
+  outcomes reconcile by the client **`unique_ref_no`** (the bank dedupes on it — a
+  repeat returns "Duplicate transaction"), and **escalate rather than tell them to
+  retry**. Never re-submit with a *new* reference.

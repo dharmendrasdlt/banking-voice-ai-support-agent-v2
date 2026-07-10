@@ -63,7 +63,7 @@ All components are fully implemented:
 *   **Ollama REST Client:** [ollama/ollama.go](file:///Users/dharmendra/golang-projects/banking-voice-ai-support-agent-v2/ollama/ollama.go) — Embeddings interface and chat completions supporting context cancellation.
 *   **Semantic Cache Store:** [db/qdrant.go](file:///Users/dharmendra/golang-projects/banking-voice-ai-support-agent-v2/db/qdrant.go) — Cosine similarity search indexes, collection setup, and automated data seeding.
 *   **Ephemeral Session Store:** [db/redis.go](file:///Users/dharmendra/golang-projects/banking-voice-ai-support-agent-v2/db/redis.go) — Stores multi-turn chat context and writes audit logs using Redis Streams.
-*   **Core Banking System:** [db/mongo.go](file:///Users/dharmendra/golang-projects/banking-voice-ai-support-agent-v2/db/mongo.go) — Customer records, account balances, credit cards, transaction history, and unique-index idempotency locks.
+*   **Core Banking System:** [db/mongo.go](file:///Users/dharmendra/golang-projects/banking-voice-ai-support-agent-v2/db/mongo.go) — Customer records, account balances, credit cards, transaction history, and a unique index on the client `unique_ref_no` (simulates the bank's duplicate-transaction rejection).
 *   **Banking MCP Gateway:** [mcp/banking_mcp.go](file:///Users/dharmendra/golang-projects/banking-voice-ai-support-agent-v2/mcp/banking_mcp.go) — Acts as the Tool call interface mapping intents to MongoDB routines.
 *   **Interactive Control Dashboard:** [frontend/index.html](file:///Users/dharmendra/golang-projects/banking-voice-ai-support-agent-v2/frontend/index.html) — Rich web interface supporting browser Web Speech STT/TTS and real-time supervisor logs.
 *   **Container Setup:** [Dockerfile](file:///Users/dharmendra/golang-projects/banking-voice-ai-support-agent-v2/Dockerfile) — Packs the compiled Go app and frontend assets into a lightweight alpine image.
@@ -89,7 +89,7 @@ Open [http://localhost:8080](http://localhost:8080) in your web browser (Safari 
     > [!NOTE]
     > Notice the telemetry logs: `cache_probe` executes on partial tokens. The instant you say *"what is my balance"*, the score jumps past `EXTREME (0.96)`. The `halt_point` event fires instantly, canceling the background warming branch.
 *   **Cache Hit (FAQ):** Ask *"what are the branch opening hours?"*. The final dispatch routes directly to the FAQ collection, returning the correct bank operating schedule.
-*   **Mutating Transaction (Confirmation & Idempotency):** Say *"transfer 500 to account 987654"*.
+*   **Mutating Transaction (Confirmation & `unique_ref_no`):** Say *"transfer 500 to account 987654"*.
     > [!IMPORTANT]
     > Mutating actions require confirmation. The agent will speak *"Please confirm: Do you want to transfer 500.00 INR to account 987654?"* and prompt you. Say *"yes"* or click **Confirm**. The transaction executes idempotently on MongoDB, and the Core Banking portal on the left instantly updates your balance to **₹4,067.89**!
 *   **Cache Miss & LLM Deflector:** Ask a general question (e.g. *"how was your day?"*). It misses both cache stores and fallbacks to Ollama (`gemma2:2b`), which responds as conversational glue.

@@ -262,7 +262,7 @@ END_OF_UTTERANCE (VAD final → authoritative FINAL transcript):
   if state == CACHE_INTERCEPT:
      • re-confirm FINAL still matches ≥ NORMAL
        - read-only action  → call Banking MCP tool → template → TTS
-       - write/money-move  → confirmation sub-dialog, THEN MCP tool (idempotency_key)
+       - write/money-move  → confirmation sub-dialog, THEN MCP tool (unique_ref_no)
        - divergence (FINAL no longer matches) → un-halt: cold-prefill + decode
   else:  # never hit EXTREME during speech
      • final cache lookup, precedence action > FAQ > LLM
@@ -341,8 +341,8 @@ session context** (never from the query text), **call the mapped Banking MCP
 tool** (`bank_action` → tool + args, `user_id` injected) with
 `context.WithTimeout`, fill the template, stream to TTS. Read-only intents route
 on match; **write / money-movement intents require explicit confirmation and
-disambiguation** (never a similarity threshold alone) and pass an
-`idempotency_key`.
+disambiguation** (never a similarity threshold alone) and pass a client
+`unique_ref_no` (the bank dedupes on it).
 
 ### 5a. Banking Backend (Local)
 
@@ -356,10 +356,12 @@ calls**. The agent never persists this data. (Local stand-in for the production
   `get_due_date(user_id, card)`, `block_card(user_id, card)` [write],
   `transfer(user_id, to, amount, unique_ref_no)` [**write / money-movement**].
 - **MongoDB collections:** `users`, `accounts`, `transactions`, `cards`.
-- **Idempotency:** `transfer` requires `unique_ref_no`; MongoDB enforces a
-  **unique index** on it — a retry/reconciliation is a no-op returning the
-  original result (this is what makes the money-movement rule in
-  `docs/FAILOVER.md` work).
+- **Payment reference (`unique_ref_no`):** `transfer` requires a client-generated
+  `unique_ref_no` (ICICI `UniqueRefNo`, HDFC/Axis `ReqRefId`, UPI `txnId`); the
+  bank **dedupes on it** — a repeat returns "Duplicate transaction". The scaffold
+  simulates this with a **unique index** on `unique_ref_no`. Reconcile an
+  indeterminate outcome by re-submitting the *same* reference; never a new one
+  (see `docs/FAILOVER.md` §B3).
 - **Identity:** no auth locally (out of scope) — a **fixed mock `user_id`** per
   session is injected into every MCP call.
 - Informational content (FAQs, bank docs) does **not** use this path — it is
@@ -514,8 +516,8 @@ baseline (§7):
   fallback (§8).
 - **Phase 6 — Evals (prove correctness, gate regressions):** versioned golden sets
   + a replay harness + CI gate — see `docs/EVALS.md`. **Release-blocking:**
-  money-movement safety (idempotency, confirmation, never-on-partial,
-  reconcile-not-retry) and guardrail/hallucination red-team. **Trend-gated:**
+  money-movement safety (confirmation, never-on-partial, duplicate-ref rejected,
+  never blind re-send) and guardrail/hallucination red-team. **Trend-gated:**
   intent-dispatch accuracy (also **tunes `EXTREME`/`NORMAL`/`0.94` offline**), STT
   WER on numbers/names/amounts, e2e task success + latency, and the v2
   interception suite (early-halt precision from the §11 logs). Green money-movement

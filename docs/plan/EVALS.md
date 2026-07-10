@@ -25,7 +25,8 @@ The highest-stakes suite. Targets **false-execution rate ≈ 0**.
 | **Never on a partial** | no bank write fires on a partial/interim transcript — only the final |
 | **No misfire** | non-transfer utterances never route to `transfer` (false-action rate = 0 on the write intents) |
 | **Deterministic errors surfaced** | insufficient funds / recipient-not-found / invalid account are relayed to the customer plainly (never masked) |
-| **Never auto-retry** | on any transfer error or mid-write failover the flow **never re-sends**; indeterminate → reconcile by ledger read (amount + recipient + time) → escalate, never "try again" |
+| **Duplicate reference rejected** | re-submitting the same `unique_ref_no` returns "Duplicate transaction" → **exactly one** execution (bank dedup) |
+| **No blind re-send** | on any transfer error / mid-write failover the flow never re-sends with a **new** reference; indeterminate → reconcile by the same `unique_ref_no` → escalate, never "try again" |
 
 ## Suite 2 — Guardrail / Hallucination Red-Team  *(release-blocking)*
 
