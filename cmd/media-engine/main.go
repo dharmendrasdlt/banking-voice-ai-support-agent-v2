@@ -21,6 +21,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/livekit/protocol/auth"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 )
 
@@ -198,12 +199,24 @@ func (s *MediaEngineServer) handleWebSocket(w http.ResponseWriter, r *http.Reque
 		case "partial_transcript":
 			// Post partial transcript to orchestrator
 			go func(m ClientWSMessage) {
+				ctx, span := telemetry.Step(context.Background(), "media.partial_transcript",
+					attribute.String("media.session_id", sessionID),
+					attribute.String("media.turn_id", m.TurnID),
+				)
+				defer span.End()
+
 				reqBody, _ := json.Marshal(map[string]string{
 					"session_id": sessionID,
 					"turn_id":    m.TurnID,
 					"text":       m.Text,
 				})
-				resp, err := s.HTTPClient.Post(s.OrchestratorURL+"/api/partial", "application/json", bytes.NewBuffer(reqBody))
+				req, err := http.NewRequestWithContext(ctx, "POST", s.OrchestratorURL+"/api/partial", bytes.NewBuffer(reqBody))
+				if err != nil {
+					log.Printf("Error creating partial request: %v", err)
+					return
+				}
+				req.Header.Set("Content-Type", "application/json")
+				resp, err := s.HTTPClient.Do(req)
 				if err != nil {
 					log.Printf("Error sending partial transcript: %v", err)
 					return
@@ -241,6 +254,12 @@ func (s *MediaEngineServer) handleWebSocket(w http.ResponseWriter, r *http.Reque
 			}(msg)
 
 		case "final_transcript":
+			ctx, span := telemetry.Step(r.Context(), "media.final_transcript",
+				attribute.String("media.session_id", sessionID),
+				attribute.String("media.turn_id", msg.TurnID),
+			)
+			defer span.End()
+
 			startProcessTime := time.Now()
 
 			reqBody, _ := json.Marshal(map[string]string{
@@ -248,7 +267,17 @@ func (s *MediaEngineServer) handleWebSocket(w http.ResponseWriter, r *http.Reque
 				"turn_id":    msg.TurnID,
 				"text":       msg.Text,
 			})
-			resp, err := s.HTTPClient.Post(s.OrchestratorURL+"/api/final", "application/json", bytes.NewBuffer(reqBody))
+			req, err := http.NewRequestWithContext(ctx, "POST", s.OrchestratorURL+"/api/final", bytes.NewBuffer(reqBody))
+			if err != nil {
+				log.Printf("Error creating final request: %v", err)
+				_ = ws.WriteJSON(map[string]any{
+					"type": "agent_speech",
+					"text": "I'm sorry, I'm having trouble connecting to my backend service. Let me find a representative.",
+				})
+				continue
+			}
+			req.Header.Set("Content-Type", "application/json")
+			resp, err := s.HTTPClient.Do(req)
 			if err != nil {
 				log.Printf("Error sending final transcript: %v", err)
 				_ = ws.WriteJSON(map[string]any{
@@ -308,6 +337,13 @@ func (s *MediaEngineServer) handleWebSocket(w http.ResponseWriter, r *http.Reque
 			}
 
 		case "confirmation":
+			ctx, span := telemetry.Step(r.Context(), "media.confirmation",
+				attribute.String("media.session_id", sessionID),
+				attribute.String("media.turn_id", msg.TurnID),
+				attribute.String("media.value", msg.Text),
+			)
+			defer span.End()
+
 			startProcessTime := time.Now()
 
 			reqBody, _ := json.Marshal(map[string]string{
@@ -315,7 +351,13 @@ func (s *MediaEngineServer) handleWebSocket(w http.ResponseWriter, r *http.Reque
 				"turn_id":    msg.TurnID,
 				"text":       msg.Text,
 			})
-			resp, err := s.HTTPClient.Post(s.OrchestratorURL+"/api/confirmation", "application/json", bytes.NewBuffer(reqBody))
+			req, err := http.NewRequestWithContext(ctx, "POST", s.OrchestratorURL+"/api/confirmation", bytes.NewBuffer(reqBody))
+			if err != nil {
+				log.Printf("Error creating confirmation request: %v", err)
+				continue
+			}
+			req.Header.Set("Content-Type", "application/json")
+			resp, err := s.HTTPClient.Do(req)
 			if err != nil {
 				log.Printf("Error sending confirmation: %v", err)
 				continue
