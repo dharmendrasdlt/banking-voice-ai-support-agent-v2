@@ -47,13 +47,13 @@ type Card struct {
 }
 
 type TransferRecord struct {
-	IdempotencyKey string    `bson:"idempotency_key"`
-	UserID         string    `bson:"user_id"`
-	ToAccount      string    `bson:"to_account"`
-	Amount         float64   `bson:"amount"`
-	TxID           string    `bson:"tx_id"`
-	Status         string    `bson:"status"`
-	CreatedAt      time.Time `bson:"created_at"`
+	UniqueRefNo  string    `bson:"unique_ref_no"`
+	UserID       string    `bson:"user_id"`
+	ToAccount    string    `bson:"to_account"`
+	Amount       float64   `bson:"amount"`
+	PaymentRefNo string    `bson:"payment_ref_no"`
+	Status       string    `bson:"status"`
+	CreatedAt    time.Time `bson:"created_at"`
 }
 
 func NewMongoManager(uri string) (*MongoManager, error) {
@@ -84,14 +84,14 @@ func NewMongoManager(uri string) (*MongoManager, error) {
 }
 
 func (m *MongoManager) initAndSeed(ctx context.Context) error {
-	// Create unique index on transfers.idempotency_key
+	// Create unique index on transfers.unique_ref_no
 	transfersColl := m.DB.Collection("transfers")
 	_, err := transfersColl.Indexes().CreateOne(ctx, mongo.IndexModel{
-		Keys:    bson.D{{Key: "idempotency_key", Value: 1}},
+		Keys:    bson.D{{Key: "unique_ref_no", Value: 1}},
 		Options: options.Index().SetUnique(true),
 	})
 	if err != nil {
-		log.Printf("Warning: failed to create unique index on idempotency_key: %v", err)
+		log.Printf("Warning: failed to create unique index on unique_ref_no: %v", err)
 	}
 
 	// Check if seeded
@@ -236,19 +236,19 @@ func (m *MongoManager) BlockCard(ctx context.Context, userID string, cardType st
 }
 
 // Transfer transfers money from the account and records the transaction idempotently
-func (m *MongoManager) Transfer(ctx context.Context, userID string, toAccount string, amount float64, idempotencyKey string) (string, error) {
-	if idempotencyKey == "" {
-		return "", fmt.Errorf("idempotency_key is required")
+func (m *MongoManager) Transfer(ctx context.Context, userID string, toAccount string, amount float64, uniqueRefNo string) (string, error) {
+	if uniqueRefNo == "" {
+		return "", fmt.Errorf("unique_ref_no is required")
 	}
 
 	transfersColl := m.DB.Collection("transfers")
 
 	// Check if already executed
 	var existing TransferRecord
-	err := transfersColl.FindOne(ctx, bson.M{"idempotency_key": idempotencyKey}).Decode(&existing)
+	err := transfersColl.FindOne(ctx, bson.M{"unique_ref_no": uniqueRefNo}).Decode(&existing)
 	if err == nil {
-		log.Printf("[Idempotency] Duplicate transfer detected, returning original tx_id %s", existing.TxID)
-		return existing.TxID, nil
+		log.Printf("[Idempotency] Duplicate transfer detected, returning original payment_ref_no %s", existing.PaymentRefNo)
+		return existing.PaymentRefNo, nil
 	}
 
 	if !errors.Is(err, mongo.ErrNoDocuments) {
@@ -279,8 +279,8 @@ func (m *MongoManager) Transfer(ctx context.Context, userID string, toAccount st
 		return "", fmt.Errorf("failed to deduct balance: %w", err)
 	}
 
-	// Generate transaction ID
-	txID := fmt.Sprintf("TXN-%d", time.Now().UnixNano())
+	// Generate transaction payment reference ID
+	paymentRefNo := fmt.Sprintf("PAY-ICICI-%d", time.Now().UnixNano()/1000)
 
 	// Insert transaction history
 	txsColl := m.DB.Collection("transactions")
@@ -297,13 +297,13 @@ func (m *MongoManager) Transfer(ctx context.Context, userID string, toAccount st
 
 	// Insert into transfers idempotency collection
 	record := TransferRecord{
-		IdempotencyKey: idempotencyKey,
-		UserID:         userID,
-		ToAccount:      toAccount,
-		Amount:         amount,
-		TxID:           txID,
-		Status:         "completed",
-		CreatedAt:      time.Now(),
+		UniqueRefNo:  uniqueRefNo,
+		UserID:       userID,
+		ToAccount:    toAccount,
+		Amount:       amount,
+		PaymentRefNo: paymentRefNo,
+		Status:       "completed",
+		CreatedAt:    time.Now(),
 	}
 
 	_, err = transfersColl.InsertOne(ctx, record)
@@ -312,12 +312,12 @@ func (m *MongoManager) Transfer(ctx context.Context, userID string, toAccount st
 		if mongo.IsDuplicateKeyError(err) {
 			// Deduct balance rollback or refund could be done here, but since we are single instance/simple, we just try to fetch the winner
 			var winner TransferRecord
-			if err2 := transfersColl.FindOne(ctx, bson.M{"idempotency_key": idempotencyKey}).Decode(&winner); err2 == nil {
-				return winner.TxID, nil
+			if err2 := transfersColl.FindOne(ctx, bson.M{"unique_ref_no": uniqueRefNo}).Decode(&winner); err2 == nil {
+				return winner.PaymentRefNo, nil
 			}
 		}
 		return "", fmt.Errorf("failed to record transfer idempotency: %w", err)
 	}
 
-	return txID, nil
+	return paymentRefNo, nil
 }

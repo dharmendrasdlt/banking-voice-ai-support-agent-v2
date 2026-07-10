@@ -939,7 +939,7 @@
             } else if (eventName === 'warm_outcome') {
                 detail = `Prefill spent: ${payload.prefill_tokens} tokens. Outcome: [${payload.used ? 'USED' : 'DISCARDED'}]. Reclaim active? [${payload.would_have_reclaimed}]`;
             } else if (eventName === 'confirmation_outcome') {
-                detail = `Mutating action [${payload.intent}] confirmed? [${payload.confirmed}]. Idempotency Key: ${payload.idempotency_key}`;
+                detail = `Mutating action [${payload.intent}] confirmed? [${payload.confirmed}]. Unique Ref No: ${payload.unique_ref_no}`;
                 setTimeout(fetchBankingData, 500); // refresh bank portal
             }
 

@@ -158,23 +158,23 @@ func (s *BankingMCPServer) CallTool(ctx context.Context, name string, args map[s
 			return "", fmt.Errorf("invalid type for parameter 'amount'")
 		}
 
-		idempotencyKey, ok := args["idempotency_key"].(string)
-		if !ok || idempotencyKey == "" {
-			return "", fmt.Errorf("missing or invalid parameter 'idempotency_key'")
+		uniqueRefNo, ok := args["unique_ref_no"].(string)
+		if !ok || uniqueRefNo == "" {
+			return "", fmt.Errorf("missing or invalid parameter 'unique_ref_no'")
 		}
 
-		txID, err := s.Mongo.Transfer(ctx, userID, to, amount, idempotencyKey)
+		paymentRefNo, err := s.Mongo.Transfer(ctx, userID, to, amount, uniqueRefNo)
 		if err != nil {
 			return "", err
 		}
 
 		result := map[string]any{
-			"user_id":         userID,
-			"to":              to,
-			"amount":          amount,
-			"tx_id":           txID,
-			"idempotency_key": idempotencyKey,
-			"text":            fmt.Sprintf("Successfully transferred %.2f to account %s. Transaction ID is %s.", amount, to, txID),
+			"user_id":        userID,
+			"to":             to,
+			"amount":         amount,
+			"payment_ref_no": paymentRefNo,
+			"unique_ref_no":  uniqueRefNo,
+			"text":           fmt.Sprintf("Successfully transferred %.2f to account %s. Payment Reference Number is %s.", amount, to, paymentRefNo),
 		}
 		resBytes, _ := json.Marshal(result)
 		return string(resBytes), nil

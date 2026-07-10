@@ -69,9 +69,21 @@ gap (A5) is added.
 Goal: worst case lose **a few seconds of raw in-flight audio**, never conversation
 state or a completed transcript.
 
-## A5. The transport reality — client connects directly to the Media Engine
+## A5. The transport reality — an L4 LB does NOT hide a dead backend
 
-The client holds a stateful connection directly to a Media Engine instance. When that instance dies, the connection is lost and the client must reconnect to a new healthy instance. There is no middle proxy hiding connection loss. Transparency comes from fast client-side reconnection rather than server-side session migration.
+An **L4 LB forwards packets**; it doesn't terminate the connection. The
+TCP/DTLS/session state lives **in the media-engine instance**. When it dies, that
+state is gone — the LB **cannot** migrate the live connection; it just lands a
+*new* connection on a healthy instance quickly. Consistent-hashing L4 (Maglev)
+pins existing flows when the backend set changes, but can't help when the backend
+is **dead** (nothing to pin to).
+
+"Client barely notices" is achievable only via an **L7 / media-aware relay**
+(Envoy leg, or SFU/TURN) that holds the client leg while the backend fails over —
+and even then the new ME needs session state + in-flight window to continue. That
+transparency comes from the relay, **not** the L4 LB. (L7 does not *replace* L4 at
+scale — L4 still does cheap high-volume DDoS-resistant fan-out and carries UDP/SRTP
+media an HTTP L7 can't.)
 
 ## A6. Why the Redis stream is scoped tightly (volume math)
 
@@ -92,13 +104,13 @@ its availability easy and its **correctness** the real work.
 
 - The **customer connection terminates at the Media Engine**, not the
   orchestrator. When an orchestrator instance dies, the customer's transport
-  **does not drop** — the media engine retries its next call against a
+  **does not drop** — the media engine (or L7 LB) retries its next call against a
   **healthy** orchestrator instance. Failover is a backend re-route, potentially
   invisible to the customer.
 - The orchestrator is **stateless by mandate** (all durable state in Redis /
   session store). Any instance is interchangeable; the new one reloads session
   state and continues. *This is why statelessness is mandated.*
-- Run **many instances** → redundancy removes the SPOF.
+- Run **many instances behind the L7 LB** → redundancy removes the SPOF.
 
 So availability = statelessness + redundancy + backend re-route. The hard part is
 what the dying instance was *doing*.
@@ -120,20 +132,35 @@ succeeded and you tell them to retry, **they** cause the double-transfer.
 
 The rule:
 
-> **Money-movement writes are never auto-retried.** On failover, resolve the
-> outcome via an idempotent **status check** (keyed by an idempotency /
-> transaction reference minted and persisted *before* dispatch), then tell the
-> customer the truth:
+> **Money-movement writes are never auto-retried.** On error/failover, **resolve
+> the outcome with a read**, then tell the customer the truth:
+> - **Deterministic failure** returned by the bank (insufficient funds, recipient
+>   not found, invalid account) → **the money definitely did not move.** Report it
+>   plainly — these messages are clear and useful, so relay them to the customer.
 > - **Committed** → confirm.
-> - **Definitely not committed** → cleanly re-attempt, or report it didn't go
->   through.
-> - **Indeterminate** (bank unreachable / no record) → **escalate to a human** to
->   verify against the ledger. **Never instruct the customer to "try again"** —
->   that relocates the double-execution risk to them.
+> - **Indeterminate** (timeout / bank unreachable / no clear result) → **do not
+>   assert failure.** Reconcile with a read (below); if still unresolved,
+>   **escalate to a human**. **Never tell the customer to "try again"** — that
+>   relocates the double-execution risk to them.
 
-**Reframe the idempotency key:** its job here is **reconciliation ("did it
-happen?"), not safe auto-retry.** It's what lets you speak the truth to the
-customer.
+### How you reconcile — by reading the ledger (we do NOT control the bank)
+
+We deliberately **do not use idempotency keys.** A real bank is an external system
+we don't control; assuming it stores/dedupes on a client key is a false safety
+net, and many core-banking transfer APIs don't. So reconciliation is **bank-API
+agnostic**: on an indeterminate outcome, **read the account's recent transactions
+and match by attributes** — amount + recipient + a tight time window. The bank
+always *has* the record; you match it rather than key into it. Fallback:
+**settlement / reconciliation files** (end-of-day batch, not real-time).
+
+Because there is no key-based dedup, **"never auto-retry" is the only protection
+against a double transfer** — reconciliation must be a **read** (ledger match),
+never a re-send.
+
+> **Scaffold note:** the local MCP + MongoDB "bank" exists only to demonstrate the
+> end-to-end flow — it does **not** mean we control a real bank. The transfer path
+> carries no idempotency key in the scaffold or in production; the ledger-read
+> match is the portable reconciliation path everywhere.
 
 ## B4. Announce success only after the action confirms
 
@@ -213,11 +240,12 @@ take the first). This is the clean contrast to Part B's "never retry a write."
   implemented. Redis Streams are only a local stand-in for the async/durable log.
 - **Build in the scaffold anyway (cheap, load-bearing later):**
   1. **Statelessness** — keep orchestrator state out of memory (Redis only).
-  2. **Idempotency keys on mutating bank actions** — mint/persist from day one,
-     even single-instance; retrofitting exactly-once later is painful.
+  2. **Confirm-before-execute + never-auto-retry** on money movement, and
+     **reconcile by ledger read** (amount + recipient + time) — no idempotency
+     keys, since we don't control the bank.
 - **Production:** Redis stream = media-engine failover buffer; Kafka = durable
-  history/audit log; many stateless orchestrator instances. See
-  `production-architecture.drawio.svg`.
+  history/audit log; L4 edge + L7/media-aware relay; many stateless orchestrator
+  instances. See `production-architecture.drawio.svg`.
 
 ---
 
@@ -227,8 +255,10 @@ take the first). This is the clean contrast to Part B's "never retry a write."
   loss — persist the **understanding** (STT output + session state) durably, treat
   raw in-flight audio as best-effort; the L4 LB cannot hide a dead backend.
 - **Orchestrator** (stateless backend): not a SPOF — re-route to a healthy
-  instance; the real work is **idempotent side effects + turn checkpointing**.
+  instance; the real work is **side-effect safety + turn checkpointing**.
 - **STT / TTS** (stateless, no side effects): the benign tier — re-route +
   recompute + resume-at-position; safe to retry or even hedge.
-- **Money movement: never auto-retry.** Reconcile via a read-only status check,
-  tell the customer the truth, and **escalate rather than tell them to retry**.
+- **Money movement: never auto-retry.** Surface deterministic bank errors
+  (insufficient funds, invalid account) to the customer; on indeterminate
+  outcomes reconcile by **matching the ledger** (amount + recipient + time) — no
+  idempotency keys — and **escalate rather than tell them to retry**.

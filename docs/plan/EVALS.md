@@ -21,11 +21,11 @@ The highest-stakes suite. Targets **false-execution rate ≈ 0**.
 
 | Check | Expectation |
 |---|---|
-| **Idempotency** | duplicate/replayed `transfer` with the same `idempotency_key` → **exactly one** execution (validates the Mongo unique index + `FAILOVER.md` rule) |
 | **Confirmation required** | a transfer intent never executes without an explicit confirmation sub-dialog |
 | **Never on a partial** | no bank write fires on a partial/interim transcript — only the final |
 | **No misfire** | non-transfer utterances never route to `transfer` (false-action rate = 0 on the write intents) |
-| **Reconcile, don't retry** | on a simulated mid-write failover, the flow does a status check and **never auto-retries**; indeterminate → escalate, never "try again" |
+| **Deterministic errors surfaced** | insufficient funds / recipient-not-found / invalid account are relayed to the customer plainly (never masked) |
+| **Never auto-retry** | on any transfer error or mid-write failover the flow **never re-sends**; indeterminate → reconcile by ledger read (amount + recipient + time) → escalate, never "try again" |
 
 ## Suite 2 — Guardrail / Hallucination Red-Team  *(release-blocking)*
 
