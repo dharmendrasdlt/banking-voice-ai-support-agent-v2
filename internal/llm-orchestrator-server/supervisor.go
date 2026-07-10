@@ -644,49 +644,56 @@ func (s *TurnSupervisor) ApplyOutputGuardrailFilter(responseText string, trusted
 	}
 
 	// Extract and parse all numbers from trustedSourceData as float64
-	reNum := regexp.MustCompile(`\b\d+(?:[\.,]\d+)?\b`)
-	trustedNumbers := reNum.FindAllString(trustedSourceData, -1)
+	trustedFloatsList := extractAllFloats(trustedSourceData)
 	trustedFloats := make(map[float64]bool)
-	for _, rawNum := range trustedNumbers {
-		cleanNum := strings.ReplaceAll(rawNum, ",", "")
-		if val, err := strconv.ParseFloat(cleanNum, 64); err == nil {
-			trustedFloats[val] = true
-		}
+	for _, val := range trustedFloatsList {
+		trustedFloats[val] = true
 	}
 
 	// Extract and parse all numbers from responseText
-	numbers := reNum.FindAllString(responseText, -1)
+	responseFloats := extractAllFloats(responseText)
 
-	if len(numbers) == 0 {
+	if len(responseFloats) == 0 {
 		return responseText // no numbers, safe to proceed
 	}
 
 	// Check if each number is present in the trusted source data
-	for _, num := range numbers {
-		// Clean formatting commas
-		cleanNum := strings.ReplaceAll(num, ",", "")
-		val, err := strconv.ParseFloat(cleanNum, 64)
-		if err != nil {
-			continue // ignore unparseable sequences
-		}
-
+	for _, val := range responseFloats {
 		// Ignore common non-financial constants (0-10), time (24/7/365, etc.)
 		intVal := int(val)
 		if val == float64(intVal) && intVal >= 0 && intVal <= 10 {
 			continue
 		}
-		if num == "24" || num == "7" || num == "30" || num == "60" || num == "365" || num == "18" {
+		if val == 24 || val == 7 || val == 30 || val == 60 || val == 365 || val == 18 {
 			continue
 		}
 
 		// Check float existence in trustedFloats
 		if !trustedFloats[val] {
-			log.Printf("[GUARDRAIL FILTER TRIP] Suppressed response due to unverified numerical value")
+			log.Printf("[GUARDRAIL FILTER TRIP] Suppressed response due to unverified numerical value: %f", val)
 			return "I'm sorry, I don't have that specific information right now. Let me connect you with a representative who can look that up for you."
 		}
 	}
 
 	return responseText
+}
+
+// extractAllFloats parses all numbers out of a text string as float64, cleaning any commas or trailing periods
+func extractAllFloats(text string) []float64 {
+	reNum := regexp.MustCompile(`\d[\d,.]*`)
+	matches := reNum.FindAllString(text, -1)
+	var results []float64
+	for _, match := range matches {
+		cleaned := match
+		for strings.HasSuffix(cleaned, ".") || strings.HasSuffix(cleaned, ",") {
+			cleaned = cleaned[:len(cleaned)-1]
+		}
+		cleaned = strings.ReplaceAll(cleaned, ",", "")
+		if val, err := strconv.ParseFloat(cleaned, 64); err == nil {
+			results = append(results, val)
+		}
+	}
+	return results
 }
 
 // Helper parsing functions
