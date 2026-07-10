@@ -1,0 +1,1102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice AI Support Agent v2 Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0c10;
+            --bg-secondary: #121620;
+            --bg-tertiary: #1a2030;
+            --accent-primary: #6c5ce7;
+            --accent-secondary: #00cec9;
+            --accent-warning: #ffb142;
+            --accent-danger: #ff5252;
+            --text-main: #f5f6fa;
+            --text-muted: #a4b0be;
+            --border-color: #2f3542;
+            --glow-color: rgba(108, 92, 231, 0.4);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-main);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        header {
+            background-color: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            z-index: 10;
+        }
+
+        .header-title h1 {
+            font-size: 1.5rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header-title p {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 0.1rem;
+        }
+
+        .header-status {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+        }
+
+        .status-pill {
+            background-color: var(--bg-primary);
+            padding: 0.5rem 1rem;
+            border-radius: 50px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            border: 1px solid var(--border-color);
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--accent-danger);
+            box-shadow: 0 0 10px var(--accent-danger);
+            transition: all 0.3s ease;
+        }
+
+        .status-indicator.connected {
+            background-color: var(--accent-secondary);
+            box-shadow: 0 0 10px var(--accent-secondary);
+        }
+
+        .status-indicator.listening {
+            background-color: var(--accent-warning);
+            box-shadow: 0 0 10px var(--accent-warning);
+            animation: pulse 1s infinite alternate;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 0.6; }
+            100% { transform: scale(1.3); opacity: 1; }
+        }
+
+        main {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 350px 1fr 400px;
+            gap: 1.5rem;
+            padding: 1.5rem;
+            height: calc(100vh - 70px);
+            overflow: hidden;
+        }
+
+        .panel {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+        }
+
+        .panel-header {
+            padding: 1.2rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: rgba(255,255,255,0.02);
+        }
+
+        .panel-header h2 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .panel-content {
+            flex: 1;
+            padding: 1.2rem;
+            overflow-y: auto;
+        }
+
+        /* Mock Bank App styles */
+        .user-profile {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .user-avatar {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+
+        .user-info h3 {
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        .user-info p {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .balance-card {
+            background: linear-gradient(135deg, var(--bg-tertiary), rgba(108, 92, 231, 0.15));
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.2rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        .balance-card span {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .balance-amount {
+            font-size: 2rem;
+            font-weight: 800;
+            margin-top: 0.5rem;
+            color: var(--text-main);
+        }
+
+        .card-status-box {
+            background-color: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .card-status-box h4 {
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+            color: var(--text-muted);
+        }
+
+        .card-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.9rem;
+        }
+
+        .badge {
+            padding: 0.2rem 0.6rem;
+            border-radius: 50px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge.active {
+            background-color: rgba(0, 206, 201, 0.2);
+            color: var(--accent-secondary);
+            border: 1px solid var(--accent-secondary);
+        }
+
+        .badge.blocked {
+            background-color: rgba(255, 82, 82, 0.2);
+            color: var(--accent-danger);
+            border: 1px solid var(--accent-danger);
+        }
+
+        .transactions-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.8rem;
+        }
+
+        .transaction-item {
+            background-color: var(--bg-tertiary);
+            padding: 0.8rem;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.85rem;
+        }
+
+        .tx-desc {
+            font-weight: 600;
+        }
+
+        .tx-date {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 0.2rem;
+        }
+
+        .tx-amount {
+            font-weight: 700;
+        }
+
+        .tx-amount.positive {
+            color: var(--accent-secondary);
+        }
+
+        .tx-amount.negative {
+            color: var(--text-main);
+        }
+
+        /* Voice Assistant Main Pane */
+        .assistant-container {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            gap: 2rem;
+        }
+
+        .voice-circle-container {
+            position: relative;
+            width: 180px;
+            height: 180px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .voice-circle-outer {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            border: 2px dashed var(--accent-primary);
+            opacity: 0.3;
+        }
+
+        .voice-circle-outer.listening {
+            animation: rotate 15s linear infinite;
+            border: 2px dashed var(--accent-warning);
+            opacity: 0.8;
+        }
+
+        .voice-circle-inner {
+            width: 120px;
+            height: 120px;
+            background: radial-gradient(circle, var(--accent-primary) 0%, rgba(108, 92, 231, 0.4) 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 30px var(--glow-color);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            z-index: 2;
+        }
+
+        .voice-circle-inner.listening {
+            background: radial-gradient(circle, var(--accent-warning) 0%, rgba(255, 177, 66, 0.4) 100%);
+            box-shadow: 0 0 30px rgba(255, 177, 66, 0.4);
+            transform: scale(1.05);
+        }
+
+        .voice-circle-inner.halted {
+            background: radial-gradient(circle, var(--accent-danger) 0%, rgba(255, 82, 82, 0.4) 100%);
+            box-shadow: 0 0 30px rgba(255, 82, 82, 0.5);
+            animation: shake 0.5s ease-in-out;
+        }
+
+        .voice-circle-inner svg {
+            width: 48px;
+            height: 48px;
+            fill: white;
+            transition: all 0.3s ease;
+        }
+
+        @keyframes rotate {
+            100% { transform: rotate(360deg); }
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-6px); }
+            40%, 80% { transform: translateX(6px); }
+        }
+
+        .waveform {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            height: 40px;
+            margin-top: 1rem;
+        }
+
+        .wave-bar {
+            width: 4px;
+            height: 5px;
+            background-color: var(--accent-primary);
+            border-radius: 2px;
+            transition: height 0.1s ease;
+        }
+
+        .waveform.active .wave-bar {
+            background-color: var(--accent-warning);
+            animation: soundWave 1.2s ease-in-out infinite alternate;
+        }
+
+        .waveform.active .wave-bar:nth-child(2) { animation-delay: 0.1s; }
+        .waveform.active .wave-bar:nth-child(3) { animation-delay: 0.2s; }
+        .waveform.active .wave-bar:nth-child(4) { animation-delay: 0.3s; }
+        .waveform.active .wave-bar:nth-child(5) { animation-delay: 0.4s; }
+        .waveform.active .wave-bar:nth-child(6) { animation-delay: 0.3s; }
+        .waveform.active .wave-bar:nth-child(7) { animation-delay: 0.2s; }
+        .waveform.active .wave-bar:nth-child(8) { animation-delay: 0.1s; }
+
+        @keyframes soundWave {
+            0% { height: 5px; }
+            100% { height: 40px; }
+        }
+
+        .text-display-box {
+            width: 80%;
+            background-color: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.2rem;
+            min-height: 120px;
+            max-height: 200px;
+            overflow-y: auto;
+            box-shadow: inset 0 2px 8px rgba(0,0,0,0.2);
+        }
+
+        .transcript-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 0.5rem;
+        }
+
+        .transcript-text {
+            font-size: 1.1rem;
+            line-height: 1.5;
+        }
+
+        .transcript-text.partial {
+            color: var(--text-muted);
+            font-style: italic;
+        }
+
+        .agent-reply-box {
+            width: 80%;
+            background: linear-gradient(135deg, rgba(108, 92, 231, 0.05), rgba(0, 206, 201, 0.05));
+            border: 1px solid var(--accent-primary);
+            border-radius: 12px;
+            padding: 1.2rem;
+            min-height: 100px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        /* Settings and Config Panel */
+        .settings-card {
+            background-color: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .toggle-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 46px;
+            height: 24px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: var(--bg-primary);
+            transition: .4s;
+            border-radius: 24px;
+            border: 1px solid var(--border-color);
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 3px;
+            bottom: 3px;
+            background-color: var(--text-muted);
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: var(--accent-primary);
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(22px);
+            background-color: white;
+        }
+
+        .slider-control {
+            margin-top: 1rem;
+        }
+
+        .slider-control label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .slider-control input[type="range"] {
+            width: 100%;
+            margin-top: 0.5rem;
+            accent-color: var(--accent-primary);
+        }
+
+        /* Structured Logging view */
+        .log-terminal {
+            flex: 1;
+            background-color: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+            box-shadow: inset 0 4px 12px rgba(0,0,0,0.4);
+        }
+
+        .log-entry {
+            line-height: 1.4;
+            padding-bottom: 0.4rem;
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+        }
+
+        .log-timestamp {
+            color: var(--text-muted);
+        }
+
+        .log-event {
+            font-weight: bold;
+        }
+
+        /* Log highlights */
+        .event-warm_start { color: #81ecec; }
+        .event-cache_probe { color: #55efc4; }
+        .event-halt_point { 
+            color: #ffeaa7;
+            background-color: rgba(255, 177, 66, 0.15);
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            border: 1px solid var(--accent-warning);
+            font-weight: 800;
+        }
+        .event-dispatch { color: #a29bfe; font-weight: bold; }
+        .event-final_reconcile { color: #fd79a8; }
+        .event-warm_outcome { color: #74b9ff; }
+        .event-confirmation_outcome { color: #ff7675; }
+
+        .latency-badge {
+            background-color: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 0.4rem;
+            text-align: center;
+            font-size: 0.8rem;
+            margin-top: 0.5rem;
+        }
+
+        .latency-val {
+            font-weight: bold;
+            color: var(--accent-secondary);
+        }
+
+        /* Confirm Modal / Dialog styling */
+        .confirm-btn-group {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 0.6rem;
+            border-radius: 8px;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.2s ease;
+        }
+
+        .btn-confirm {
+            background-color: var(--accent-primary);
+            color: white;
+        }
+
+        .btn-confirm:hover {
+            background-color: #5b4bc4;
+            box-shadow: 0 0 10px rgba(108, 92, 231, 0.4);
+        }
+
+        .btn-cancel {
+            background-color: var(--border-color);
+            color: var(--text-main);
+        }
+
+        .btn-cancel:hover {
+            background-color: #3e4453;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-title">
+            <h1>Voice AI Banking Support Agent</h1>
+            <p>Go Orchestrator / Speculative Warm KV Cache & Mid-Flight Halt (v2)</p>
+        </div>
+        <div class="header-status">
+            <div class="status-pill">
+                <span class="status-indicator" id="ws-indicator"></span>
+                <span id="ws-text">Disconnected</span>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <!-- Panel 1: Live Banking Portal -->
+        <section class="panel">
+            <div class="panel-header">
+                <h2>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+                    Mock Core Banking
+                </h2>
+                <span class="badge active">Demo Mode</span>
+            </div>
+            <div class="panel-content">
+                <div class="user-profile">
+                    <div class="user-avatar">DY</div>
+                    <div class="user-info">
+                        <h3 id="user-name">Dharmendra Yadav</h3>
+                        <p id="user-id-label">ID: mock_user_123</p>
+                    </div>
+                </div>
+
+                <div class="balance-card">
+                    <span>Available Balance</span>
+                    <div class="balance-amount" id="balance-val">₹4,567.89</div>
+                </div>
+
+                <div class="card-status-box">
+                    <h4>Card Information</h4>
+                    <div class="card-row">
+                        <span>Visa Credit (*** 3456)</span>
+                        <span class="badge active" id="card-status-badge">Active</span>
+                    </div>
+                    <div class="card-row" style="margin-top: 0.5rem; font-size: 0.8rem; color: var(--text-muted);">
+                        <span>Due Date:</span>
+                        <span id="card-due-date">2026-07-25</span>
+                    </div>
+                </div>
+
+                <h3 style="font-size: 1rem; margin-bottom: 0.8rem; font-weight: 600;">Recent Transactions</h3>
+                <div class="transactions-list" id="transactions-box">
+                    <div class="transaction-item">
+                        <div>
+                            <div class="tx-desc">Grocery Store</div>
+                            <div class="tx-date">1 day ago</div>
+                        </div>
+                        <div class="tx-amount negative">-₹150.00</div>
+                    </div>
+                    <div class="transaction-item">
+                        <div>
+                            <div class="tx-desc">Salary Credit</div>
+                            <div class="tx-date">10 days ago</div>
+                        </div>
+                        <div class="tx-amount positive">+₹2,500.00</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Panel 2: Live Conversation & Voice Node -->
+        <section class="panel" style="background-color: var(--bg-primary); border-color: rgba(255,255,255,0.03);">
+            <div class="assistant-container">
+                <div class="voice-circle-container">
+                    <div class="voice-circle-outer" id="mic-circle-outer"></div>
+                    <div class="voice-circle-inner" id="mic-btn">
+                        <svg viewBox="0 0 24 24" id="mic-icon">
+                            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                            <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                        </svg>
+                    </div>
+                </div>
+
+                <div class="waveform" id="visual-waveform">
+                    <div class="wave-bar"></div>
+                    <div class="wave-bar"></div>
+                    <div class="wave-bar"></div>
+                    <div class="wave-bar"></div>
+                    <div class="wave-bar"></div>
+                    <div class="wave-bar"></div>
+                    <div class="wave-bar"></div>
+                    <div class="wave-bar"></div>
+                </div>
+
+                <div class="text-display-box">
+                    <div class="transcript-label">User Transcripts (Stable Partials)</div>
+                    <div class="transcript-text" id="transcript-val">Click the microphone to start speaking...</div>
+                </div>
+
+                <div class="agent-reply-box">
+                    <div class="transcript-label">Agent Audio Output (TTS)</div>
+                    <div class="transcript-text" id="agent-reply-val">Agent response will show here...</div>
+                    <div class="confirm-btn-group" id="confirm-box" style="display: none;">
+                        <button class="btn btn-confirm" id="btn-confirm-yes">Confirm</button>
+                        <button class="btn btn-cancel" id="btn-confirm-no">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Panel 3: Supervisor Config & Logs -->
+        <section class="panel">
+            <div class="panel-header">
+                <h2>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+                    Supervisor Telemetry
+                </h2>
+            </div>
+            <div class="panel-content" style="display: flex; flex-direction: column;">
+                <div class="settings-card">
+                    <div class="toggle-container">
+                        <div>
+                            <h3 style="font-size: 0.9rem; font-weight: 600;">Speculative LLM Warming</h3>
+                            <p style="font-size: 0.75rem; color: var(--text-muted);">Parallel warm-up of Branch A</p>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="warming-toggle" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="slider-control">
+                        <label>
+                            <span>EXTREME Threshold (Halt)</span>
+                            <span id="extreme-val-label">0.96</span>
+                        </label>
+                        <input type="range" id="extreme-slider" min="0.90" max="0.99" step="0.01" value="0.96">
+                    </div>
+
+                    <div class="slider-control">
+                        <label>
+                            <span>NORMAL Threshold (Dispatch)</span>
+                            <span id="normal-val-label">0.88</span>
+                        </label>
+                        <input type="range" id="normal-slider" min="0.80" max="0.95" step="0.01" value="0.88">
+                    </div>
+
+                    <div class="latency-badge">
+                        Post-Speech Latency: <span class="latency-val" id="latency-metric">-- ms</span>
+                    </div>
+                </div>
+
+                <h3 style="font-size: 0.9rem; margin-bottom: 0.5rem; font-weight: 600;">Real-time Decision Stream</h3>
+                <div class="log-terminal" id="log-terminal">
+                    <div class="log-entry" style="color: var(--text-muted)">System initialized. Awaiting voice connection.</div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const wsIndicator = document.getElementById('ws-indicator');
+        const wsText = document.getElementById('ws-text');
+        const micBtn = document.getElementById('mic-btn');
+        const micIcon = document.getElementById('mic-icon');
+        const micCircleOuter = document.getElementById('mic-circle-outer');
+        const visualWaveform = document.getElementById('visual-waveform');
+        const transcriptVal = document.getElementById('transcript-val');
+        const agentReplyVal = document.getElementById('agent-reply-val');
+        const logTerminal = document.getElementById('log-terminal');
+        const confirmBox = document.getElementById('confirm-box');
+        
+        // Banking elements
+        const balanceVal = document.getElementById('balance-val');
+        const cardStatusBadge = document.getElementById('card-status-badge');
+        const cardDueDate = document.getElementById('card-due-date');
+        const transactionsBox = document.getElementById('transactions-box');
+
+        // Config knobs
+        const warmingToggle = document.getElementById('warming-toggle');
+        const extremeSlider = document.getElementById('extreme-slider');
+        const normalSlider = document.getElementById('normal-slider');
+        const extremeValLabel = document.getElementById('extreme-val-label');
+        const normalValLabel = document.getElementById('normal-val-label');
+        const latencyMetric = document.getElementById('latency-metric');
+
+        // State variables
+        let socket = null;
+        let recognition = null;
+        let isListening = false;
+        let isHalted = false;
+        let utteranceStartTime = 0;
+        let currentUtteranceId = "";
+
+        // UI Slider adjustments
+        extremeSlider.addEventListener('input', (e) => {
+            extremeValLabel.textContent = e.target.value;
+            sendConfig();
+        });
+        normalSlider.addEventListener('input', (e) => {
+            normalValLabel.textContent = e.target.value;
+            sendConfig();
+        });
+        warmingToggle.addEventListener('change', () => {
+            sendConfig();
+        });
+
+        // Initialize WebSockets
+        function connectWebSocket() {
+            const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const host = window.location.host;
+            socket = new WebSocket(`${proto}//${host}/ws`);
+
+            socket.onopen = () => {
+                wsIndicator.className = 'status-indicator connected';
+                wsText.textContent = 'Connected';
+                addLog('WS', 'Connected to Go Orchestrator backend');
+                sendConfig();
+                fetchBankingData();
+            };
+
+            socket.onclose = () => {
+                wsIndicator.className = 'status-indicator';
+                wsText.textContent = 'Disconnected';
+                addLog('WS', 'Disconnected from backend. Retrying in 3s...', 'error');
+                setTimeout(connectWebSocket, 3000);
+            };
+
+            socket.onerror = (err) => {
+                console.error("WS Error:", err);
+            };
+
+            socket.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+                handleBackendMessage(msg);
+            };
+        }
+
+        function sendConfig() {
+            if (!socket || socket.readyState !== WebSocket.OPEN) return;
+            socket.send(JSON.stringify({
+                type: 'config',
+                payload: {
+                    warming_enabled: warmingToggle.checked,
+                    extreme_threshold: parseFloat(extremeSlider.value),
+                    normal_threshold: parseFloat(normalSlider.value)
+                }
+            }));
+        }
+
+        function handleBackendMessage(msg) {
+            switch(msg.type) {
+                case 'log_event':
+                    formatLogEvent(msg.event, msg.payload);
+                    break;
+                case 'agent_speech':
+                    agentReplyVal.textContent = msg.text;
+                    agentReplyVal.className = 'transcript-text';
+                    speakTTS(msg.text);
+                    if (msg.latency_ms) {
+                        latencyMetric.textContent = `${msg.latency_ms} ms`;
+                    }
+                    break;
+                case 'confirmation_required':
+                    agentReplyVal.textContent = msg.text;
+                    agentReplyVal.className = 'transcript-text';
+                    confirmBox.style.display = 'flex';
+                    speakTTS(msg.text);
+                    break;
+                case 'banking_data_update':
+                    updateBankingUI(msg.payload);
+                    break;
+            }
+        }
+
+        // Fetch user data directly from DB via REST endpoint
+        async function fetchBankingData() {
+            try {
+                const res = await fetch('/api/bank-data');
+                const data = await res.json();
+                updateBankingUI(data);
+            } catch (err) {
+                console.error("Failed to fetch bank data:", err);
+            }
+        }
+
+        function updateBankingUI(data) {
+            balanceVal.textContent = `₹${data.balance.toLocaleString('en-IN', {minimumFractionDigits: 2})}`;
+            cardStatusBadge.textContent = data.card_status.toUpperCase();
+            cardStatusBadge.className = `badge ${data.card_status === 'active' ? 'active' : 'blocked'}`;
+            cardDueDate.textContent = data.card_due_date;
+
+            // Render transactions
+            transactionsBox.innerHTML = '';
+            data.transactions.forEach(tx => {
+                const item = document.createElement('div');
+                item.className = 'transaction-item';
+                const sign = tx.amount < 0 ? '-' : '+';
+                const amtClass = tx.amount < 0 ? 'negative' : 'positive';
+                const absoluteAmount = Math.abs(tx.amount);
+                
+                item.innerHTML = `
+                    <div>
+                        <div class="tx-desc">${tx.description}</div>
+                        <div class="tx-date">${tx.date}</div>
+                    </div>
+                    <div class="tx-amount ${amtClass}">${sign}₹${absoluteAmount.toLocaleString('en-IN', {minimumFractionDigits: 2})}</div>
+                `;
+                transactionsBox.appendChild(item);
+            });
+        }
+
+        function formatLogEvent(eventName, payload) {
+            const ts = new Date().toLocaleTimeString();
+            let detail = JSON.stringify(payload);
+
+            if (eventName === 'warm_start') {
+                detail = `Warming extended on partial text: "${payload.text}"`;
+            } else if (eventName === 'cache_probe') {
+                detail = `Probed cache. Action score: ${payload.best_action_score.toFixed(3)}, FAQ score: ${payload.best_faq_score.toFixed(3)}`;
+            } else if (eventName === 'halt_point') {
+                detail = `!!! INTERCEPT !!! Extreme intent match [${payload.action_intent}] with score ${payload.score.toFixed(3)} >= EXTREME (${payload.EXTREME})`;
+                triggerHaltUI();
+            } else if (eventName === 'dispatch') {
+                detail = `Turn dispatched to: [${payload.path.toUpperCase()}]` + (payload.matched_intent ? ` matched: ${payload.matched_intent} (score: ${payload.score.toFixed(3)})` : '');
+            } else if (eventName === 'final_reconcile') {
+                detail = `Utterance end check: State [${payload.state}]. Diverged? [${payload.diverged}]`;
+            } else if (eventName === 'warm_outcome') {
+                detail = `Prefill spent: ${payload.prefill_tokens} tokens. Outcome: [${payload.used ? 'USED' : 'DISCARDED'}]. Reclaim active? [${payload.would_have_reclaimed}]`;
+            } else if (eventName === 'confirmation_outcome') {
+                detail = `Mutating action [${payload.intent}] confirmed? [${payload.confirmed}]. Idempotency Key: ${payload.idempotency_key}`;
+                setTimeout(fetchBankingData, 500); // refresh bank portal
+            }
+
+            addLog(eventName, detail);
+        }
+
+        function addLog(event, text, type = '') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            const timeSpan = `<span class="log-timestamp">[${new Date().toLocaleTimeString()}]</span> `;
+            const eventSpan = `<span class="log-event event-${event}">${event}:</span> `;
+            entry.innerHTML = timeSpan + eventSpan + text;
+            logTerminal.appendChild(entry);
+            logTerminal.scrollTop = logTerminal.scrollHeight;
+        }
+
+        function triggerHaltUI() {
+            isHalted = true;
+            micCircleOuter.className = 'voice-circle-outer';
+            micBtn.className = 'voice-circle-inner halted';
+            setTimeout(() => {
+                micBtn.className = 'voice-circle-inner listening';
+                isHalted = false;
+            }, 600);
+        }
+
+        // Web Speech API STT
+        function setupSpeechRecognition() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                addLog('STT', 'Web Speech API is not supported in this browser. Voice features disabled.', 'error');
+                return;
+            }
+
+            recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.lang = 'en-US';
+
+            recognition.onstart = () => {
+                isListening = true;
+                wsIndicator.className = 'status-indicator listening';
+                micCircleOuter.className = 'voice-circle-outer listening';
+                micBtn.className = 'voice-circle-inner listening';
+                visualWaveform.className = 'waveform active';
+                transcriptVal.textContent = "Listening...";
+                transcriptVal.className = "transcript-text partial";
+                agentReplyVal.textContent = "Agent is waiting...";
+                confirmBox.style.display = 'none';
+                
+                // Reset timers
+                utteranceStartTime = Date.now();
+                currentUtteranceId = "urn-" + Date.now();
+            };
+
+            recognition.onend = () => {
+                isListening = false;
+                wsIndicator.className = 'status-indicator connected';
+                micCircleOuter.className = 'voice-circle-outer';
+                micBtn.className = 'voice-circle-inner';
+                visualWaveform.className = 'waveform';
+            };
+
+            recognition.onresult = (event) => {
+                let interimTranscript = '';
+                let finalTranscript = '';
+
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) {
+                        finalTranscript += event.results[i][0].transcript;
+                    } else {
+                        interimTranscript += event.results[i][0].transcript;
+                    }
+                }
+
+                if (interimTranscript) {
+                    transcriptVal.textContent = interimTranscript;
+                    transcriptVal.className = "transcript-text partial";
+                    
+                    // Send stable partials to backend for speculative warming (Branch A) + Cache Probe (Branch B)
+                    if (socket && socket.readyState === WebSocket.OPEN) {
+                        socket.send(JSON.stringify({
+                            type: 'partial_transcript',
+                            turn_id: currentUtteranceId,
+                            text: interimTranscript
+                        }));
+                    }
+                }
+
+                if (finalTranscript) {
+                    const cleanFinal = finalTranscript.trim();
+                    transcriptVal.textContent = cleanFinal;
+                    transcriptVal.className = "transcript-text";
+                    
+                    // Mark the start of post-speech processing
+                    utteranceStartTime = Date.now();
+
+                    // Send authoritative final transcript to backend for dispatch
+                    if (socket && socket.readyState === WebSocket.OPEN) {
+                        socket.send(JSON.stringify({
+                            type: 'final_transcript',
+                            turn_id: currentUtteranceId,
+                            text: cleanFinal,
+                            timestamp_ms: utteranceStartTime
+                        }));
+                    }
+                }
+            };
+        }
+
+        // Web Speech API TTS
+        function speakTTS(text) {
+            if ('speechSynthesis' in window) {
+                // Cancel any ongoing speaking
+                window.speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.rate = 1.0;
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+
+        micBtn.addEventListener('click', () => {
+            if (isHalted) return;
+            if (isListening) {
+                recognition.stop();
+            } else {
+                if (!recognition) setupSpeechRecognition();
+                if (recognition) recognition.start();
+            }
+        });
+
+        // Confirmation Actions
+        document.getElementById('btn-confirm-yes').addEventListener('click', () => {
+            confirmBox.style.display = 'none';
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({
+                    type: 'confirmation',
+                    turn_id: currentUtteranceId,
+                    text: 'yes'
+                }));
+            }
+        });
+
+        document.getElementById('btn-confirm-no').addEventListener('click', () => {
+            confirmBox.style.display = 'none';
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({
+                    type: 'confirmation',
+                    turn_id: currentUtteranceId,
+                    text: 'cancel'
+                }));
+            }
+        });
+
+        // Boot
+        connectWebSocket();
+        setupSpeechRecognition();
+    </script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+# Binaries
+banking-agent
+media-engine
+llm-orchestrator-server
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# IDEs
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Local compose data directories
+qdrant_storage/
+redis_data/
+mongodb_data/
