@@ -12,6 +12,7 @@ import (
 	"banking-voice-ai-agent/internal/ollama"
 
 	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type RedisManager struct {
@@ -39,6 +40,7 @@ func NewRedisManager(addr string) (*RedisManager, error) {
 func (r *RedisManager) GetSessionContext(ctx context.Context, sessionID string) ([]ollama.ChatMessage, error) {
 	ctx, span := telemetry.Step(ctx, "redis.get_session")
 	defer span.End()
+	span.SetAttributes(attribute.String("redis.key_type", "session_context"))
 	key := fmt.Sprintf("session:%s:context", sessionID)
 	data, err := r.Client.Get(ctx, key).Result()
 	if err == redis.Nil {
@@ -58,6 +60,10 @@ func (r *RedisManager) GetSessionContext(ctx context.Context, sessionID string) 
 func (r *RedisManager) SaveSessionContext(ctx context.Context, sessionID string, messages []ollama.ChatMessage) error {
 	ctx, span := telemetry.Step(ctx, "redis.save_session")
 	defer span.End()
+	span.SetAttributes(
+		attribute.String("redis.key_type", "session_context"),
+		attribute.Int("redis.num_messages", len(messages)),
+	)
 	key := fmt.Sprintf("session:%s:context", sessionID)
 	data, err := json.Marshal(messages)
 	if err != nil {
@@ -81,6 +87,10 @@ func (r *RedisManager) ClearSessionContext(ctx context.Context, sessionID string
 func (r *RedisManager) AddAuditLog(ctx context.Context, turnID string, eventName string, payload map[string]any) error {
 	ctx, span := telemetry.Step(ctx, "redis.audit")
 	defer span.End()
+	span.SetAttributes(
+		attribute.String("redis.stream", "audit_log_stream"),
+		attribute.String("redis.event_type", eventName),
+	)
 	streamKey := "audit_log_stream"
 
 	// Marshal payload to string

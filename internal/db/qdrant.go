@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"banking-voice-ai-agent/internal/ollama"
+
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type QdrantManager struct {
@@ -146,6 +148,7 @@ func (q *QdrantManager) UpsertPoints(ctx context.Context, collection string, poi
 func (q *QdrantManager) Search(ctx context.Context, collection string, vector []float64, limit int) ([]QdrantMatch, error) {
 	ctx, span := telemetry.Step(ctx, "qdrant.search")
 	defer span.End()
+	span.SetAttributes(attribute.String("qdrant.collection", collection))
 	url := fmt.Sprintf("%s/collections/%s/points/search", q.BaseURL, collection)
 
 	bodyMap := map[string]any{

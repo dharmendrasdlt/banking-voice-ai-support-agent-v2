@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type Client struct {
@@ -62,6 +64,7 @@ func NewClient(baseURL, chatModel, embedModel string) *Client {
 func (c *Client) GetEmbedding(ctx context.Context, text string) ([]float64, error) {
 	ctx, span := telemetry.Step(ctx, "ollama.embedding")
 	defer span.End()
+	span.SetAttributes(attribute.String("ollama.model", c.EmbedModel))
 	reqBody, err := json.Marshal(EmbedRequest{
 		Model:  c.EmbedModel,
 		Prompt: text,
@@ -101,6 +104,10 @@ func (c *Client) GetEmbedding(ctx context.Context, text string) ([]float64, erro
 func (c *Client) Chat(ctx context.Context, messages []ChatMessage, stream bool, streamChan chan<- string) (string, error) {
 	ctx, span := telemetry.Step(ctx, "ollama.chat")
 	defer span.End()
+	span.SetAttributes(
+		attribute.String("ollama.model", c.ChatModel),
+		attribute.Int("ollama.num_messages", len(messages)),
+	)
 	reqBody, err := json.Marshal(ChatRequest{
 		Model:    c.ChatModel,
 		Messages: messages,
