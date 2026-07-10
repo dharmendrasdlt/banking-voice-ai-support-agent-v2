@@ -1178,54 +1178,24 @@
                 if (interimTranscript.trim() || finalTranscript.trim()) {
                     const speechText = (interimTranscript || finalTranscript).trim().toLowerCase();
                     
-                    // Echo filter check: if the heard text is part of what the agent is currently speaking, ignore it!
-                    let isEcho = false;
-                    const isAgentCurrentlySpeaking = (activeAudio !== null) || ('speechSynthesis' in window && window.speechSynthesis.speaking);
-                    if (isAgentCurrentlySpeaking && currentlyPlayingItem && currentlyPlayingItem.text) {
-                        const agentTextClean = currentlyPlayingItem.text.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g,"");
-                        const heardTextClean = speechText.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g,"");
-                        
-                        // For short utterances (1 or 2 words), never classify as echo to allow barge-in/responses (e.g. "yes", "no", "balance")
-                        const heardWords = heardTextClean.split(/\s+/).filter(w => w.length > 2);
-                        if (heardWords.length >= 3) {
-                            if (agentTextClean.includes(heardTextClean) || heardTextClean.includes(agentTextClean)) {
-                                isEcho = true;
-                            } else {
-                                // Check word overlap: if > 70% of heard words are in the agent's text, it's likely echo
-                                let matchCount = 0;
-                                heardWords.forEach(w => {
-                                    if (agentTextClean.includes(w)) matchCount++;
-                                });
-                                if (matchCount / heardWords.length > 0.7) {
-                                    isEcho = true;
-                                }
-                            }
-                        }
+                    let interrupted = false;
+                    if (activeAudio) {
+                        activeAudio.pause();
+                        activeAudio = null;
+                        console.log("[Barge-in] Stopped agent audio playback because user spoke.");
+                        sendClientLog('info', 'barge_in', 'Customer interrupted agent audio playback.');
+                        interrupted = true;
                     }
-                    
-                    if (isEcho) {
-                        console.log("[Barge-in] Filtered out echo (agent speaking its own voice):", speechText);
-                        return; // Ignore echo entirely and do not send to backend
-                    } else {
-                        let interrupted = false;
-                        if (activeAudio) {
-                            activeAudio.pause();
-                            activeAudio = null;
-                            console.log("[Barge-in] Stopped agent audio playback because user spoke.");
-                            sendClientLog('info', 'barge_in', 'Customer interrupted agent audio playback.');
-                            interrupted = true;
-                        }
-                        if ('speechSynthesis' in window && window.speechSynthesis.speaking) {
-                            window.speechSynthesis.cancel();
-                            console.log("[Barge-in] Stopped native TTS speech because user spoke.");
-                            sendClientLog('info', 'barge_in', 'Customer interrupted agent native speech.');
-                            interrupted = true;
-                        }
-                        if (interrupted && currentlyPlayingItem) {
-                            console.log("[Barge-in] Prepending interrupted chunk back to queue:", currentlyPlayingItem.text);
-                            audioQueue.unshift(currentlyPlayingItem);
-                            currentlyPlayingItem = null;
-                        }
+                    if ('speechSynthesis' in window && window.speechSynthesis.speaking) {
+                        window.speechSynthesis.cancel();
+                        console.log("[Barge-in] Stopped native TTS speech because user spoke.");
+                        sendClientLog('info', 'barge_in', 'Customer interrupted agent native speech.');
+                        interrupted = true;
+                    }
+                    if (interrupted && currentlyPlayingItem) {
+                        console.log("[Barge-in] Prepending interrupted chunk back to queue:", currentlyPlayingItem.text);
+                        audioQueue.unshift(currentlyPlayingItem);
+                        currentlyPlayingItem = null;
                     }
                 }
 
