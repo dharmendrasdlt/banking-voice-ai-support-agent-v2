@@ -454,11 +454,12 @@ func (s *TurnSupervisor) executeCommitPath(ctx context.Context, turnID string, s
 		}
 
 		// Store confirmation context in Redis (simulating session state/saga checkpoint)
+		refNo, _ := args["unique_ref_no"].(string)
 		confCtx := ConfirmationContext{
 			Intent:      intent,
 			ToolName:    bankAction,
 			Args:        args,
-			UniqueRefNo: args["unique_ref_no"].(string),
+			UniqueRefNo: refNo,
 		}
 
 		confBytes, _ := json.Marshal(confCtx)
