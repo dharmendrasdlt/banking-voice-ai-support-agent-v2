@@ -412,7 +412,14 @@ func (s *TurnSupervisor) HandleFinalTranscript(ctx context.Context, turnID strin
 					log.Printf("[Supervisor] Warning: LLM formatting failed for fallback tool: %v. Using raw response.", err)
 					formattedText = res.ResponseText
 				}
-				safeText := s.ApplyOutputGuardrailFilter(formattedText, res.ResponseText)
+				var historyBuilder strings.Builder
+				for _, msg := range history {
+					historyBuilder.WriteString(msg.Content)
+					historyBuilder.WriteString(" ")
+				}
+				historyStr := historyBuilder.String()
+
+				safeText := s.ApplyOutputGuardrailFilter(formattedText, res.ResponseText+" "+historyStr)
 				return "llm", safeText, nil
 			} else if res.Status == "resume_playback" {
 				return "resume_playback", "", nil
@@ -424,7 +431,14 @@ func (s *TurnSupervisor) HandleFinalTranscript(ctx context.Context, turnID strin
 	}
 
 	// Run output guardrail filter to block un-sourced values
-	safeText := s.ApplyOutputGuardrailFilter(response, "")
+	var historyBuilder strings.Builder
+	for _, msg := range history {
+		historyBuilder.WriteString(msg.Content)
+		historyBuilder.WriteString(" ")
+	}
+	historyStr := historyBuilder.String()
+
+	safeText := s.ApplyOutputGuardrailFilter(response, historyStr)
 
 	return "llm", safeText, nil
 }
@@ -515,7 +529,14 @@ func (s *TurnSupervisor) executeCommitPath(ctx context.Context, turnID string, s
 	}
 
 	// Verify guardrail
-	safeText := s.ApplyOutputGuardrailFilter(responseText, mcpRes)
+	var historyBuilder strings.Builder
+	for _, msg := range history {
+		historyBuilder.WriteString(msg.Content)
+		historyBuilder.WriteString(" ")
+	}
+	historyStr := historyBuilder.String()
+
+	safeText := s.ApplyOutputGuardrailFilter(responseText, mcpRes+" "+historyStr)
 
 	return "text", safeText, nil
 }
