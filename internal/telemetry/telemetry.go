@@ -200,7 +200,7 @@ func (s *loggingSpan) End(options ...trace.SpanEndOption) {
 		}
 	}
 
-	Logger("app").InfoContext(s.ctx, s.name, slog.Any("details", logRecord))
+	Logger("app").InfoContext(s.ctx, s.name, logRecord.SlogArgs()...)
 }
 
 // Step starts a span AND returns a trace.Span. When End() is called on the span,

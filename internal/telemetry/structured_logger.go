@@ -127,3 +127,69 @@ func (l StructuredLog) LogValue() slog.Value {
 
 	return slog.GroupValue(attrs...)
 }
+
+// SlogArgs converts the StructuredLog into a slice of key-value slog.Attr pairs,
+// flattening the struct so attributes are logged at the root level.
+func (l StructuredLog) SlogArgs() []any {
+	var args []any
+
+	if l.TraceID != "" {
+		args = append(args, slog.String("trace_id", l.TraceID))
+	}
+	if l.SpanID != "" {
+		args = append(args, slog.String("span_id", l.SpanID))
+	}
+	if l.Duration != "" {
+		args = append(args, slog.String("duration", l.Duration))
+	}
+	if l.DurationMS != 0 {
+		args = append(args, slog.Int64("duration_ms", l.DurationMS))
+	}
+	if l.PostSpeechLatencyMS != 0 {
+		args = append(args, slog.Int64("post_speech_latency_ms", l.PostSpeechLatencyMS))
+	}
+	if l.SessionID != "" {
+		args = append(args, slog.String("session_id", l.SessionID))
+	}
+	if l.TurnID != "" {
+		args = append(args, slog.String("turn_id", l.TurnID))
+	}
+	if l.DBSystem != "" {
+		args = append(args, slog.String("db.system", l.DBSystem))
+	}
+	if l.DBCollection != "" {
+		args = append(args, slog.String("db.collection", l.DBCollection))
+	}
+	if l.DBOperation != "" {
+		args = append(args, slog.String("db.operation", l.DBOperation))
+	}
+	if l.DBLimit != 0 {
+		args = append(args, slog.Int64("db.limit", l.DBLimit))
+	}
+	if l.RedisKeyType != "" {
+		args = append(args, slog.String("redis.key_type", l.RedisKeyType))
+	}
+	if l.RedisOperation != "" {
+		args = append(args, slog.String("redis.operation", l.RedisOperation))
+	}
+	if l.RedisStream != "" {
+		args = append(args, slog.String("redis.stream", l.RedisStream))
+	}
+	if l.RedisEventType != "" {
+		args = append(args, slog.String("redis.event_type", l.RedisEventType))
+	}
+	if l.QdrantCollection != "" {
+		args = append(args, slog.String("qdrant.collection", l.QdrantCollection))
+	}
+	if l.MCPTool != "" {
+		args = append(args, slog.String("mcp.tool", l.MCPTool))
+	}
+	if l.OllamaModel != "" {
+		args = append(args, slog.String("ollama.model", l.OllamaModel))
+	}
+	if l.OllamaNumMessages != 0 {
+		args = append(args, slog.Int("ollama.num_messages", l.OllamaNumMessages))
+	}
+
+	return args
+}

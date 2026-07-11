@@ -345,7 +345,7 @@ func (s *MediaEngineServer) handleWebSocket(w http.ResponseWriter, r *http.Reque
 								TurnID:              msg.TurnID,
 								DBOperation:         pathType,
 							}
-							telemetry.Logger("media-engine").InfoContext(ctx, "websocket_turn", slog.Any("details", logRecord))
+							telemetry.Logger("media-engine").InfoContext(ctx, "websocket_turn", logRecord.SlogArgs()...)
 
 							// Send logs back to frontend UI
 							_ = ws.WriteJSON(map[string]any{
@@ -437,7 +437,7 @@ func (s *MediaEngineServer) handleWebSocket(w http.ResponseWriter, r *http.Reque
 						TurnID:              msg.TurnID,
 						DBOperation:         "confirmation",
 					}
-					telemetry.Logger("media-engine").InfoContext(ctx, "websocket_confirmation", slog.Any("details", logRecord))
+					telemetry.Logger("media-engine").InfoContext(ctx, "websocket_confirmation", logRecord.SlogArgs()...)
 
 					_ = ws.WriteJSON(map[string]any{
 						"type":  "log_event",
