@@ -207,6 +207,25 @@ func (s *OrchestratorServer) handleFinal(w http.ResponseWriter, r *http.Request)
 	confirmKey := fmt.Sprintf("session:%s:confirm", req.SessionID)
 	hasPendingConfirm, _ := s.Redis.Client.Exists(r.Context(), confirmKey).Result()
 
+	w.Header().Set("Content-Type", "application/x-ndjson")
+	w.Header().Set("Transfer-Encoding", "chunked")
+
+	var flusher http.Flusher
+	if f, ok := w.(http.Flusher); ok {
+		flusher = f
+	}
+
+	writeChunk := func(eventType string, text string) {
+		chunk := map[string]any{
+			"type": eventType,
+			"text": text,
+		}
+		_ = json.NewEncoder(w).Encode(chunk)
+		if flusher != nil {
+			flusher.Flush()
+		}
+	}
+
 	var pathType, replyText string
 	var err error
 	userID := "mock_user_123"
@@ -215,7 +234,9 @@ func (s *OrchestratorServer) handleFinal(w http.ResponseWriter, r *http.Request)
 		pathType = "confirmation"
 		replyText, err = s.Supervisor.HandleConfirmation(r.Context(), req.TurnID, req.SessionID, userID, req.Text)
 	} else {
-		pathType, replyText, err = s.Supervisor.HandleFinalTranscript(r.Context(), req.TurnID, req.SessionID, userID, req.Text, false, nil)
+		pathType, replyText, err = s.Supervisor.HandleFinalTranscript(r.Context(), req.TurnID, req.SessionID, userID, req.Text, false, nil, func(eventType string, text string) {
+			writeChunk(eventType, text)
+		})
 	}
 
 	if err != nil {
@@ -234,14 +255,16 @@ func (s *OrchestratorServer) handleFinal(w http.ResponseWriter, r *http.Request)
 	}()
 
 	resp := map[string]any{
+		"type":            "final",
 		"path":            pathType,
 		"text":            replyText,
 		"tokens_count":    len(strings.Fields(req.Text)),
 		"warming_enabled": s.Supervisor.IsWarmingEnabled(),
 	}
-
-	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
+	if flusher != nil {
+		flusher.Flush()
+	}
 }
 
 func (s *OrchestratorServer) handleConfirmation(w http.ResponseWriter, r *http.Request) {

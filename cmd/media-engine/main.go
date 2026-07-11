@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -288,52 +289,69 @@ func (s *MediaEngineServer) handleWebSocket(w http.ResponseWriter, r *http.Reque
 			}
 			defer resp.Body.Close()
 
-			var res map[string]any
-			if err := json.NewDecoder(resp.Body).Decode(&res); err == nil {
-				elapsedMs := time.Since(startProcessTime).Milliseconds()
-
-				pathType, _ := res["path"].(string)
-				replyText, _ := res["text"].(string)
-				tokensCount, _ := res["tokens_count"].(float64)
-				warmingEnabled, _ := res["warming_enabled"].(bool)
-
-				msgType := "agent_speech"
-				if pathType == "confirm_required" {
-					msgType = "confirmation_required"
-				} else if pathType == "resume_playback" {
-					msgType = "resume_playback"
+			reader := bufio.NewReader(resp.Body)
+			for {
+				line, err := reader.ReadBytes('\n')
+				if err != nil {
+					if err == io.EOF {
+						break
+					}
+					log.Printf("Error reading stream chunk: %v", err)
+					break
 				}
 
-				_ = ws.WriteJSON(map[string]any{
-					"type":       msgType,
-					"text":       replyText,
-					"latency_ms": elapsedMs,
-				})
+				var chunk map[string]any
+				if err := json.Unmarshal(line, &chunk); err == nil {
+					chunkType, _ := chunk["type"].(string)
+					if chunkType == "final" {
+						elapsedMs := time.Since(startProcessTime).Milliseconds()
+						pathType, _ := chunk["path"].(string)
+						replyText, _ := chunk["text"].(string)
+						tokensCount, _ := chunk["tokens_count"].(float64)
+						warmingEnabled, _ := chunk["warming_enabled"].(bool)
 
-				// Send logs back to frontend UI
-				_ = ws.WriteJSON(map[string]any{
-					"type":  "log_event",
-					"event": "dispatch",
-					"payload": map[string]any{
-						"path":           pathType,
-						"matched_intent": pathType,
-						"score":          0.97,
-					},
-				})
+						msgType := "agent_speech"
+						if pathType == "confirm_required" {
+							msgType = "confirmation_required"
+						} else if pathType == "resume_playback" {
+							msgType = "resume_playback"
+						}
 
-				_ = ws.WriteJSON(map[string]any{
-					"type":  "log_event",
-					"event": "warm_outcome",
-					"payload": map[string]any{
-						"prefill_tokens":       int(tokensCount),
-						"used":                 pathType == "llm",
-						"discarded":            pathType != "llm",
-						"would_have_reclaimed": warmingEnabled,
-					},
-				})
+						_ = ws.WriteJSON(map[string]any{
+							"type":       msgType,
+							"text":       replyText,
+							"latency_ms": elapsedMs,
+						})
 
-				// Send bank update trigger to UI
-				s.fetchAndSendBankData(ws)
+						// Send logs back to frontend UI
+						_ = ws.WriteJSON(map[string]any{
+							"type":  "log_event",
+							"event": "dispatch",
+							"payload": map[string]any{
+								"path":           pathType,
+								"matched_intent": pathType,
+								"score":          0.97,
+							},
+						})
+
+						_ = ws.WriteJSON(map[string]any{
+							"type":  "log_event",
+							"event": "warm_outcome",
+							"payload": map[string]any{
+								"prefill_tokens":       int(tokensCount),
+								"used":                 pathType == "llm",
+								"discarded":            pathType != "llm",
+								"would_have_reclaimed": warmingEnabled,
+							},
+						})
+
+						// Send bank update trigger to UI
+						s.fetchAndSendBankData(ws)
+					} else {
+						// Forward the intermediate chunks (thought, speech) directly to WebSocket
+						_ = ws.WriteJSON(chunk)
+					}
+				}
 			}
 
 		case "confirmation":

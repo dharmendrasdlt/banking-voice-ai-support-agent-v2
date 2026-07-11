@@ -244,7 +244,7 @@ func (s *TurnSupervisor) HandleStablePartial(ctx context.Context, turnID string,
 }
 
 // HandleFinalTranscript executes the final dispatch logic: action > FAQ > LLM.
-func (s *TurnSupervisor) HandleFinalTranscript(ctx context.Context, turnID string, sessionID string, userID string, finalTranscript string, intercepted bool, interceptedPayload map[string]any) (string, string, error) {
+func (s *TurnSupervisor) HandleFinalTranscript(ctx context.Context, turnID string, sessionID string, userID string, finalTranscript string, intercepted bool, interceptedPayload map[string]any, onChunk func(eventType string, text string)) (string, string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -286,7 +286,7 @@ func (s *TurnSupervisor) HandleFinalTranscript(ctx context.Context, turnID strin
 						"NORMAL":    s.NormalThreshold,
 					})
 
-					return s.executeCommitPath(ctx, turnID, sessionID, userID, interceptedPayload, finalTranscript, history)
+					return s.executeCommitPath(ctx, turnID, sessionID, userID, interceptedPayload, finalTranscript, history, onChunk)
 				}
 			}
 		}
@@ -354,7 +354,7 @@ func (s *TurnSupervisor) HandleFinalTranscript(ctx context.Context, turnID strin
 		})
 
 		recordTurn(ctx, "action")
-		return s.executeCommitPath(ctx, turnID, sessionID, userID, payload, finalTranscript, history)
+		return s.executeCommitPath(ctx, turnID, sessionID, userID, payload, finalTranscript, history, onChunk)
 	}
 
 	// Precedence 2: FAQ Match >= NORMAL
@@ -392,7 +392,7 @@ func (s *TurnSupervisor) HandleFinalTranscript(ctx context.Context, turnID strin
 	}
 
 	// Fallback to Ollama safe-deflector prompt
-	response, err := s.runLLMDeflector(ctx, sessionID, finalTranscript, history)
+	response, err := s.runLLMDeflector(ctx, sessionID, finalTranscript, history, onChunk)
 	if err != nil {
 		return "", "", err
 	}
@@ -404,10 +404,10 @@ func (s *TurnSupervisor) HandleFinalTranscript(ctx context.Context, turnID strin
 		res, err := s.AuditService.ExecuteToolCall(ctx, turnID, sessionID, userID, cleanedResponse)
 		if err == nil {
 			if res.Status == "confirm_required" {
-				return s.executeCommitPath(ctx, turnID, sessionID, userID, res.Payload, finalTranscript, history)
+				return s.executeCommitPath(ctx, turnID, sessionID, userID, res.Payload, finalTranscript, history, onChunk)
 			} else if res.Status == "success" {
 				// Use LLM to formulate a natural verbal response grounded in the tool output
-				formattedText, err := s.formatLLMResponse(ctx, finalTranscript, res.ResponseText)
+				formattedText, err := s.formatLLMResponse(ctx, finalTranscript, res.ResponseText, onChunk)
 				if err != nil {
 					log.Printf("[Supervisor] Warning: LLM formatting failed for fallback tool: %v. Using raw response.", err)
 					formattedText = res.ResponseText
@@ -430,7 +430,7 @@ func (s *TurnSupervisor) HandleFinalTranscript(ctx context.Context, turnID strin
 }
 
 // executeCommitPath handles executing the action path or scheduling confirmation
-func (s *TurnSupervisor) executeCommitPath(ctx context.Context, turnID string, sessionID string, userID string, actionPayload map[string]any, finalTranscript string, history []ollama.ChatMessage) (string, string, error) {
+func (s *TurnSupervisor) executeCommitPath(ctx context.Context, turnID string, sessionID string, userID string, actionPayload map[string]any, finalTranscript string, history []ollama.ChatMessage, onChunk func(eventType string, text string)) (string, string, error) {
 	intent := actionPayload["intent"].(string)
 	bankAction := actionPayload["bank_action"].(string)
 
@@ -508,7 +508,7 @@ func (s *TurnSupervisor) executeCommitPath(ctx context.Context, turnID string, s
 	}
 
 	// Use LLM to formulate a natural verbal response grounded in the tool output
-	responseText, err := s.formatLLMResponse(ctx, finalTranscript, mcpRes)
+	responseText, err := s.formatLLMResponse(ctx, finalTranscript, mcpRes, onChunk)
 	if err != nil {
 		log.Printf("[Supervisor] Warning: LLM formatting failed: %v. Falling back to raw response.", err)
 		responseText = mcpRes
@@ -607,7 +607,7 @@ func (s *TurnSupervisor) HandleConfirmation(ctx context.Context, turnID string, 
 }
 
 // runLLMDeflector executes the LLM fallthrough in a deflector role
-func (s *TurnSupervisor) runLLMDeflector(ctx context.Context, sessionID string, query string, history []ollama.ChatMessage) (string, error) {
+func (s *TurnSupervisor) runLLMDeflector(ctx context.Context, sessionID string, query string, history []ollama.ChatMessage, onChunk func(eventType string, text string)) (string, error) {
 	// Construct role-limited prompt (§6)
 	systemPrompt := DefaultSystemPrompt
 
@@ -617,15 +617,23 @@ func (s *TurnSupervisor) runLLMDeflector(ctx context.Context, sessionID string, 
 	messages = append(messages, history...)
 	messages = append(messages, ollama.ChatMessage{Role: "user", Content: query})
 
-	responseChan := make(chan string, 10)
+	responseChan := make(chan ollama.ChatResponse, 10)
 	var chatErr error
 	go func() {
 		_, chatErr = s.Ollama.Chat(ctx, messages, true, responseChan)
 	}()
 
 	var fullResponse strings.Builder
-	for token := range responseChan {
-		fullResponse.WriteString(token)
+	for chunk := range responseChan {
+		if chunk.Message.Thinking != "" && onChunk != nil {
+			onChunk("thought", chunk.Message.Thinking)
+		}
+		if chunk.Message.Content != "" {
+			if onChunk != nil {
+				onChunk("speech", chunk.Message.Content)
+			}
+			fullResponse.WriteString(chunk.Message.Content)
+		}
 	}
 
 	if chatErr != nil {
@@ -789,7 +797,7 @@ func (s *TurnSupervisor) LogConversationTurn(ctx context.Context, userID, sessio
 }
 
 // formatLLMResponse utilizes the LLM to write a friendly customer-facing verbal response from the raw bank data.
-func (s *TurnSupervisor) formatLLMResponse(ctx context.Context, query string, mcpRes string) (string, error) {
+func (s *TurnSupervisor) formatLLMResponse(ctx context.Context, query string, mcpRes string, onChunk func(eventType string, text string)) (string, error) {
 	systemPrompt := "You are a friendly customer service agent for a retail bank. Formulate a natural, concise verbal response to the customer based ONLY on the provided raw bank data. Speak in friendly, conversational, short sentences. For transaction lists, use ordinals like First, Second, etc. and avoid robotic signs like plus/minus. Translate negative/positive values to friendly descriptions (e.g. 'spent 150' instead of '-150')."
 	
 	promptText := fmt.Sprintf("Customer query: %s\nRaw bank data: %s\nFormulate the response:", query, mcpRes)
@@ -799,15 +807,23 @@ func (s *TurnSupervisor) formatLLMResponse(ctx context.Context, query string, mc
 		{Role: "user", Content: promptText},
 	}
 	
-	responseChan := make(chan string, 10)
+	responseChan := make(chan ollama.ChatResponse, 10)
 	var chatErr error
 	go func() {
 		_, chatErr = s.Ollama.Chat(ctx, messages, true, responseChan)
 	}()
 	
 	var llmResponse strings.Builder
-	for token := range responseChan {
-		llmResponse.WriteString(token)
+	for chunk := range responseChan {
+		if chunk.Message.Thinking != "" && onChunk != nil {
+			onChunk("thought", chunk.Message.Thinking)
+		}
+		if chunk.Message.Content != "" {
+			if onChunk != nil {
+				onChunk("speech", chunk.Message.Content)
+			}
+			llmResponse.WriteString(chunk.Message.Content)
+		}
 	}
 
 	if chatErr != nil {

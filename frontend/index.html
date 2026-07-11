@@ -467,6 +467,33 @@
             letter-spacing: 0.5px;
         }
 
+        details.chat-thought-details {
+            margin: 6px 0;
+            padding: 8px 12px;
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-left: 3px solid var(--accent-secondary);
+            border-radius: 8px;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            max-width: 100%;
+            align-self: flex-start;
+            transition: all 0.2s ease;
+        }
+        details.chat-thought-details summary {
+            font-weight: 600;
+            cursor: pointer;
+            outline: none;
+            user-select: none;
+            color: var(--text-muted);
+        }
+        details.chat-thought-details .chat-thought-content {
+            margin-top: 6px;
+            white-space: pre-wrap;
+            font-style: italic;
+            line-height: 1.4;
+        }
+
         /* Settings and Config Panel */
         .settings-card {
             background-color: var(--bg-tertiary);
@@ -944,31 +971,74 @@
                 case 'log_event':
                     formatLogEvent(msg.event, msg.payload);
                     break;
+                case 'thought':
+                    if (!activeThoughtBox) {
+                        const details = document.createElement('details');
+                        details.className = 'chat-thought-details';
+                        details.setAttribute('open', '');
+                        
+                        const summary = document.createElement('summary');
+                        summary.textContent = 'Thought Process';
+                        
+                        const content = document.createElement('div');
+                        content.className = 'chat-thought-content';
+                        
+                        details.appendChild(summary);
+                        details.appendChild(content);
+                        chatHistoryBox.appendChild(details);
+                        
+                        activeThoughtBox = details;
+                        activeThoughtContent = content;
+                    }
+                    activeThoughtContent.textContent += msg.text;
+                    chatHistoryBox.scrollTop = chatHistoryBox.scrollHeight;
+                    break;
+                case 'speech':
+                    if (!activeAgentBubble) {
+                        activeUserBubble = null; // reset user active partials
+                        activeAgentBubble = createAgentChatBubble();
+                    }
+                    activeAgentBubble.textContent += msg.text;
+                    chatHistoryBox.scrollTop = chatHistoryBox.scrollHeight;
+                    break;
                 case 'agent_speech':
-                    // If it's the very first welcome message, overwrite the initial placeholder bubble
-                    const welcomeBubble = document.getElementById('welcome-chat-bubble');
-                    if (welcomeBubble && (welcomeBubble.textContent.includes("initialized") || welcomeBubble.textContent.includes("Awaiting") || welcomeBubble.textContent.includes("Disconnected"))) {
-                        if (msg.text.includes("welcome back to ICICI Bank support")) {
-                            if (hasGreeted) {
-                                console.log("[WS] Suppressing repeated welcome greeting on reconnect");
-                                welcomeBubble.textContent = "Session active. Speak to start banking.";
-                                break;
-                            }
-                            hasGreeted = true;
-                        }
-                        // Change id so it doesn't get matched again
-                        welcomeBubble.removeAttribute('id');
-                        typewriteText(welcomeBubble, msg.text, 30);
+                    // Collapse any active thought box
+                    if (activeThoughtBox) {
+                        activeThoughtBox.removeAttribute('open');
+                        activeThoughtBox = null;
+                        activeThoughtContent = null;
+                    }
+                    // If we were streaming, activeAgentBubble is already populated.
+                    // Just set its final text to make sure it matches exactly (or clean it).
+                    if (activeAgentBubble) {
+                        activeAgentBubble.textContent = msg.text;
+                        activeAgentBubble = null;
                     } else {
-                        // Otherwise append a new agent message bubble
-                        if (msg.text.includes("welcome back to ICICI Bank support")) {
-                            if (hasGreeted) {
-                                console.log("[WS] Suppressing repeated welcome greeting on reconnect");
-                                break;
+                        // If it's the very first welcome message, overwrite the initial placeholder bubble
+                        const welcomeBubble = document.getElementById('welcome-chat-bubble');
+                        if (welcomeBubble && (welcomeBubble.textContent.includes("initialized") || welcomeBubble.textContent.includes("Awaiting") || welcomeBubble.textContent.includes("Disconnected"))) {
+                            if (msg.text.includes("welcome back to ICICI Bank support")) {
+                                if (hasGreeted) {
+                                    console.log("[WS] Suppressing repeated welcome greeting on reconnect");
+                                    welcomeBubble.textContent = "Session active. Speak to start banking.";
+                                    break;
+                                }
+                                hasGreeted = true;
                             }
-                            hasGreeted = true;
+                            // Change id so it doesn't get matched again
+                            welcomeBubble.removeAttribute('id');
+                            typewriteText(welcomeBubble, msg.text, 30);
+                        } else {
+                            // Otherwise append a new agent message bubble
+                            if (msg.text.includes("welcome back to ICICI Bank support")) {
+                                if (hasGreeted) {
+                                    console.log("[WS] Suppressing repeated welcome greeting on reconnect");
+                                    break;
+                                }
+                                hasGreeted = true;
+                            }
+                            appendChatMessage('agent', msg.text);
                         }
-                        appendChatMessage('agent', msg.text);
                     }
 
                     speakTTS(msg.text);
@@ -977,7 +1047,18 @@
                     }
                     break;
                 case 'confirmation_required':
-                    appendChatMessage('agent', msg.text);
+                    // Collapse any active thought box
+                    if (activeThoughtBox) {
+                        activeThoughtBox.removeAttribute('open');
+                        activeThoughtBox = null;
+                        activeThoughtContent = null;
+                    }
+                    if (activeAgentBubble) {
+                        activeAgentBubble.textContent = msg.text;
+                        activeAgentBubble = null;
+                    } else {
+                        appendChatMessage('agent', msg.text);
+                    }
                     confirmBox.style.display = 'flex';
                     speakTTS(msg.text);
                     break;
@@ -1345,6 +1426,8 @@
         let typingInterval = null;
         let activeUserBubble = null;
         let activeAgentBubble = null;
+        let activeThoughtBox = null;
+        let activeThoughtContent = null;
 
         function createAgentChatBubble() {
             if (!chatHistoryBox) return null;

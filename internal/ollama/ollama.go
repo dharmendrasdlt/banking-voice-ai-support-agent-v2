@@ -22,8 +22,9 @@ type Client struct {
 }
 
 type ChatMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role     string `json:"role"`
+	Content  string `json:"content"`
+	Thinking string `json:"thinking,omitempty"`
 }
 
 type ChatRequest struct {
@@ -102,13 +103,13 @@ func (c *Client) GetEmbedding(ctx context.Context, text string) ([]float64, erro
 // Chat calls chat endpoint. If stream is true, returns a channel of strings and an error.
 // If stream is false, it returns the single completion string.
 // Context cancellation will abort the Ollama request mid-flight.
-func (c *Client) Chat(ctx context.Context, messages []ChatMessage, stream bool, streamChan chan<- string) (string, error) {
+func (c *Client) Chat(ctx context.Context, messages []ChatMessage, stream bool, streamChan chan<- ChatResponse) (string, error) {
 	ctx, span := telemetry.Step(ctx, "ollama.chat",
 		attribute.String("ollama.model", c.ChatModel),
 		attribute.Int("ollama.num_messages", len(messages)),
 	)
 	defer span.End()
-	thinkVal := false
+	thinkVal := true
 	reqBody, err := json.Marshal(ChatRequest{
 		Model:    c.ChatModel,
 		Messages: messages,
@@ -169,9 +170,9 @@ func (c *Client) Chat(ctx context.Context, messages []ChatMessage, stream bool, 
 					log.Printf("[Ollama] Stream decoding error: %v", err)
 					return
 				}
-				if chunk.Message.Content != "" {
+				if chunk.Message.Content != "" || chunk.Message.Thinking != "" || chunk.Done {
 					select {
-					case streamChan <- chunk.Message.Content:
+					case streamChan <- chunk:
 					case <-ctx.Done():
 						return
 					}
