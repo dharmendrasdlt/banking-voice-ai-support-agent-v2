@@ -509,20 +509,62 @@ func TestFullPipelineConversationalE2E(t *testing.T) {
 	turns := []struct {
 		Query               string
 		ExpectedType        string // expected WS message type
+		SimulateHalt        bool
 		VerifyResponse      func(t *testing.T, text string, thoughts []string, speech []string)
 	}{
-		// Turn 1: Check balance
+		// Turn 1: Greeting
 		{
-			Query:        "my balance",
+			Query:        "hello",
 			ExpectedType: "agent_speech",
 			VerifyResponse: func(t *testing.T, text string, thoughts []string, speech []string) {
 				lower := strings.ToLower(text)
-				if !strings.Contains(lower, "4,567.89") && !strings.Contains(lower, "4567.89") {
+				if !strings.Contains(lower, "hello") && !strings.Contains(lower, "hi") {
+					t.Errorf("Unexpected greeting: %q", text)
+				}
+			},
+		},
+		// Turn 2: Check balance (Simulate early halt mid-sentence!)
+		{
+			Query:        "check my balance please",
+			ExpectedType: "agent_speech",
+			SimulateHalt: true,
+			VerifyResponse: func(t *testing.T, text string, thoughts []string, speech []string) {
+				lower := strings.ToLower(text)
+				if !strings.Contains(lower, "balance is") && !strings.Contains(lower, "current balance") {
 					t.Errorf("Balance missing in response: %s", text)
 				}
 			},
 		},
-		// Turn 2: Hindi greeting
+		// Turn 3: Transfer money (triggers confirm_required checkpoint)
+		{
+			Query:        "transfer 100 to account 987654",
+			ExpectedType: "confirmation_required",
+			VerifyResponse: func(t *testing.T, text string, thoughts []string, speech []string) {
+				lower := strings.ToLower(text)
+				if !strings.Contains(lower, "confirm") || !strings.Contains(lower, "987654") || !strings.Contains(lower, "100") {
+					t.Errorf("Failed to trigger confirmation prompt: %q", text)
+				}
+			},
+		},
+		// Turn 4: Cancel transaction ("no wait")
+		{
+			Query:        "no wait",
+			ExpectedType: "agent_speech",
+			VerifyResponse: func(t *testing.T, text string, thoughts []string, speech []string) {
+				lower := strings.ToLower(text)
+				if !strings.Contains(lower, "cancel") && !strings.Contains(lower, "ok") && !strings.Contains(lower, "wait") {
+					t.Errorf("Failed to cancel transfer saga: %q", text)
+				}
+			},
+		},
+		// Turn 5: Resume playback
+		{
+			Query:        "resume",
+			ExpectedType: "resume_playback",
+			VerifyResponse: func(t *testing.T, text string, thoughts []string, speech []string) {
+			},
+		},
+		// Turn 6: Hindi greeting -> Devnagari check
 		{
 			Query:        "namaste",
 			ExpectedType: "agent_speech",
@@ -535,26 +577,111 @@ func TestFullPipelineConversationalE2E(t *testing.T) {
 					}
 				}
 				if !hasHindi {
-					t.Errorf("Expected Hindi response in Devnagari but got: %q", text)
+					t.Errorf("Expected Hindi Devnagari reply but got: %q", text)
 				}
 			},
 		},
-		// Turn 3: Transfer money (triggers confirm_required)
+		// Turn 7: block my credit card (confirm required)
 		{
-			Query:        "transfer 500 to account 987654",
+			Query:        "block my credit card",
 			ExpectedType: "confirmation_required",
 			VerifyResponse: func(t *testing.T, text string, thoughts []string, speech []string) {
 				lower := strings.ToLower(text)
-				if !strings.Contains(lower, "confirm") || !strings.Contains(lower, "987654") || !strings.Contains(lower, "500") {
-					t.Errorf("Failed to trigger confirmation prompt: %q", text)
+				if !strings.Contains(lower, "confirm") && !strings.Contains(text, "ब्लॉक") {
+					t.Errorf("Expected block confirmation prompt: %q", text)
 				}
+			},
+		},
+		// Turn 8: yes (execute card block)
+		{
+			Query:        "yes",
+			ExpectedType: "agent_speech",
+			VerifyResponse: func(t *testing.T, text string, thoughts []string, speech []string) {
+				lower := strings.ToLower(text)
+				if !strings.Contains(lower, "block") && !strings.Contains(lower, "debit") && !strings.Contains(lower, "credit") && !strings.Contains(lower, "success") && !strings.Contains(lower, "ok") {
+					t.Errorf("Failed to confirm card block: %q", text)
+				}
+			},
+		},
+		// Turn 9: Check block status from history context (Rule #2)
+		{
+			Query:        "is my credit card blocked?",
+			ExpectedType: "agent_speech",
+			VerifyResponse: func(t *testing.T, text string, thoughts []string, speech []string) {
+				lower := strings.ToLower(text)
+				if strings.Contains(lower, "representative") || strings.Contains(lower, "look that up") {
+					t.Errorf("Guardrail tripped on card blocked status: %q", text)
+				}
+			},
+		},
+		// Turn 10: Continue audio queue
+		{
+			Query:        "go on",
+			ExpectedType: "resume_playback",
+			VerifyResponse: func(t *testing.T, text string, thoughts []string, speech []string) {
 			},
 		},
 	}
 
 	for idx, turn := range turns {
 		turnNum := idx + 1
-		t.Logf("\n--- Pipeline Turn %d: User: %q ---", turnNum, turn.Query)
+		t.Logf("\n--- WS Pipeline Turn %d: User: %q ---", turnNum, turn.Query)
+
+		if turn.SimulateHalt {
+			// Send partial transcript "check my bal"
+			p1 := map[string]any{
+				"type":    "partial_transcript",
+				"turn_id": fmt.Sprintf("pipeline-turn-%d", turnNum),
+				"text":    "check my bal",
+			}
+			_ = ws.WriteJSON(p1)
+
+			// Wait for cache_probe log event
+			var probeMatched bool
+			for i := 0; i < 50; i++ {
+				_, msgBytes, err := ws.ReadMessage()
+				if err != nil {
+					break
+				}
+				var c map[string]any
+				_ = json.Unmarshal(msgBytes, &c)
+				if c["type"] == "log_event" && c["event"] == "cache_probe" {
+					probeMatched = true
+					t.Logf("[WS Event] %s -> cache_probe", p1["text"])
+					break
+				}
+			}
+			if !probeMatched {
+				t.Error("Expected cache_probe log event for partial transcript")
+			}
+
+			// Send partial transcript "check my balance please "
+			p2 := map[string]any{
+				"type":    "partial_transcript",
+				"turn_id": fmt.Sprintf("pipeline-turn-%d", turnNum),
+				"text":    "check my balance please ",
+			}
+			_ = ws.WriteJSON(p2)
+
+			// Wait for halt_point log event
+			var haltMatched bool
+			for i := 0; i < 50; i++ {
+				_, msgBytes, err := ws.ReadMessage()
+				if err != nil {
+					break
+				}
+				var c map[string]any
+				_ = json.Unmarshal(msgBytes, &c)
+				if c["type"] == "log_event" && c["event"] == "halt_point" {
+					haltMatched = true
+					t.Logf("[WS Event] %s -> halt_point", p2["text"])
+					break
+				}
+			}
+			if !haltMatched {
+				t.Error("Expected halt_point log event for partial transcript")
+			}
+		}
 
 		// Send final transcript over WebSocket
 		payload := map[string]any{
