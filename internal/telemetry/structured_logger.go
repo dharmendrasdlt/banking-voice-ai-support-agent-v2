@@ -16,8 +16,9 @@ type StructuredLog struct {
 	SpanID  string `json:"span_id,omitempty"`
 
 	// Execution Metrics
-	Duration   string `json:"duration,omitempty"`    // e.g. "3.51ms", "2.14s"
-	DurationMS int64  `json:"duration_ms,omitempty"` // Raw milliseconds for aggregation
+	Duration             string `json:"duration,omitempty"`              // e.g. "3.51ms", "2.14s"
+	DurationMS           int64  `json:"duration_ms,omitempty"`           // Raw milliseconds for aggregation
+	PostSpeechLatencyMS  int64  `json:"post_speech_latency_ms,omitempty"` // User end-of-speech to agent response latency
 
 	// Context Metadata
 	SessionID string `json:"session_id,omitempty"`

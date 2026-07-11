@@ -272,6 +272,12 @@ func (s *TurnSupervisor) HandleFinalTranscript(ctx context.Context, turnID strin
 	wordCount := len(strings.Fields(finalTranscript))
 	bypassCache := len(history) > 0 && wordCount < 3
 
+	// Do not bypass cache for direct command keywords
+	lowerTranscript := strings.ToLower(finalTranscript)
+	if strings.Contains(lowerTranscript, "transaction") || strings.Contains(lowerTranscript, "balance") || strings.Contains(lowerTranscript, "due") || strings.Contains(lowerTranscript, "block") {
+		bypassCache = false
+	}
+
 	// 1. Reconcile if we had an early halt
 	if !bypassCache && intercepted && interceptedPayload != nil {
 		// Embed final and verify score >= NORMAL
@@ -807,7 +813,7 @@ func (s *TurnSupervisor) LogConversationTurn(ctx context.Context, userID, sessio
 
 // formatLLMResponse utilizes the LLM to write a friendly customer-facing verbal response from the raw bank data.
 func (s *TurnSupervisor) formatLLMResponse(ctx context.Context, query string, mcpRes string, onChunk func(eventType string, text string)) (string, error) {
-	systemPrompt := "You are a friendly customer service agent for a retail bank. Formulate a natural, concise verbal response to the customer based ONLY on the provided raw bank data. Speak in friendly, conversational, short sentences. For transaction lists, use ordinals like First, Second, etc. and avoid robotic signs like plus/minus. Translate negative/positive values to friendly descriptions (e.g. 'spent 150' instead of '-150')."
+	systemPrompt := "You are a friendly customer service agent for a retail bank. Formulate a natural, conversational response based ONLY on the provided raw bank data. You MUST list all transactions provided in the raw data, detailing the merchant/description, amount, and date. Speak in friendly, conversational, short sentences. For transaction lists, use ordinals like First, Second, etc. and avoid robotic signs like plus/minus. Translate negative/positive values to friendly descriptions (e.g. 'spent 150' instead of '-150')."
 	
 	promptText := fmt.Sprintf("Customer query: %s\nRaw bank data: %s\nFormulate the response:", query, mcpRes)
 	

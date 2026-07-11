@@ -138,15 +138,64 @@ func (s *loggingSpan) End(options ...trace.SpanEndOption) {
 	s.Span.SetAttributes(attribute.String("duration", duration.String()))
 	s.Span.End(options...)
 
-	// Convert otel attributes to slog fields
-	var slogArgs []any
-	for _, attr := range s.attrs {
-		slogArgs = append(slogArgs, slog.Any(string(attr.Key), attr.Value.AsInterface()))
+	spanContext := trace.SpanContextFromContext(s.ctx)
+
+	logRecord := StructuredLog{
+		Timestamp:  time.Now(),
+		Level:      "INFO",
+		Message:    s.name,
+		Logger:     "app",
+		Duration:   duration.String(),
+		DurationMS: duration.Milliseconds(),
 	}
-	slogArgs = append(slogArgs, slog.String("duration", duration.String()))
-	slogArgs = append(slogArgs, slog.Int64("duration_ms", duration.Milliseconds()))
-	
-	Logger("app").InfoContext(s.ctx, s.name, slogArgs...)
+
+	if spanContext.IsValid() {
+		logRecord.TraceID = spanContext.TraceID().String()
+		logRecord.SpanID = spanContext.SpanID().String()
+	}
+
+	// Unpack attributes into strictly typed struct fields
+	for _, attr := range s.attrs {
+		key := string(attr.Key)
+		val := attr.Value.AsInterface()
+
+		switch key {
+		case "db.system":
+			logRecord.DBSystem, _ = val.(string)
+		case "db.collection":
+			logRecord.DBCollection, _ = val.(string)
+		case "db.operation":
+			logRecord.DBOperation, _ = val.(string)
+		case "db.limit":
+			if i, ok := val.(int64); ok {
+				logRecord.DBLimit = i
+			}
+		case "redis.key_type":
+			logRecord.RedisKeyType, _ = val.(string)
+		case "redis.operation":
+			logRecord.RedisOperation, _ = val.(string)
+		case "redis.stream":
+			logRecord.RedisStream, _ = val.(string)
+		case "redis.event_type":
+			logRecord.RedisEventType, _ = val.(string)
+		case "qdrant.collection":
+			logRecord.QdrantCollection, _ = val.(string)
+		case "mcp.tool":
+			logRecord.MCPTool, _ = val.(string)
+		case "ollama.model":
+			logRecord.OllamaModel, _ = val.(string)
+		case "ollama.num_messages":
+			if i, ok := val.(int); ok {
+				logRecord.OllamaNumMessages = i
+			}
+		case "session_id":
+			logRecord.SessionID, _ = val.(string)
+		case "turn_id":
+			logRecord.TurnID, _ = val.(string)
+		}
+	}
+
+	Logger("app").InfoContext(s.ctx, s.name, slog.Any("details", logRecord))
 }
 
 // Step starts a span AND returns a trace.Span. When End() is called on the span,

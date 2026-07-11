@@ -219,6 +219,8 @@ func (q *QdrantManager) SeedData(ctx context.Context, ollamaClient *ollama.Clien
 		{Text: "what is my balance", Intent: "balance", ResponseTemplate: "Your current account balance is {{balance}}.", BankAction: "get_balance"},
 		{Text: "check my balance please", Intent: "balance", ResponseTemplate: "Your current account balance is {{balance}}.", BankAction: "get_balance"},
 		{Text: "how much money do i have left", Intent: "balance", ResponseTemplate: "Your current account balance is {{balance}}.", BankAction: "get_balance"},
+		{Text: "my transactions", Intent: "transactions", ResponseTemplate: "Here are your recent transactions: {{transactions}}.", BankAction: "get_transactions"},
+		{Text: "transactions", Intent: "transactions", ResponseTemplate: "Here are your recent transactions: {{transactions}}.", BankAction: "get_transactions"},
 		{Text: "show recent transactions", Intent: "transactions", ResponseTemplate: "Here are your recent transactions: {{transactions}}.", BankAction: "get_transactions"},
 		{Text: "what transactions occurred on my account", Intent: "transactions", ResponseTemplate: "Here are your recent transactions: {{transactions}}.", BankAction: "get_transactions"},
 		{Text: "what are my last transactions", Intent: "transactions", ResponseTemplate: "Here are your recent transactions: {{transactions}}.", BankAction: "get_transactions"},

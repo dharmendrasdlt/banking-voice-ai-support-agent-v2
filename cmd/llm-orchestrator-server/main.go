@@ -139,12 +139,14 @@ type FinalRequest struct {
 	SessionID string `json:"session_id"`
 	TurnID    string `json:"turn_id"`
 	Text      string `json:"text"`
+	UserID    string `json:"user_id"`
 }
 
 type ConfirmationRequest struct {
 	SessionID string `json:"session_id"`
 	TurnID    string `json:"turn_id"`
 	Text      string `json:"text"`
+	UserID    string `json:"user_id"`
 }
 
 type ConfigPayload struct {
@@ -230,7 +232,10 @@ func (s *OrchestratorServer) handleFinal(w http.ResponseWriter, r *http.Request)
 
 	var pathType, replyText string
 	var err error
-	userID := "mock_user_123"
+	userID := req.UserID
+	if userID == "" {
+		userID = "mock_user_123"
+	}
 
 	if hasPendingConfirm > 0 {
 		pathType = "confirmation"
@@ -276,7 +281,10 @@ func (s *OrchestratorServer) handleConfirmation(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	userID := "mock_user_123"
+	userID := req.UserID
+	if userID == "" {
+		userID = "mock_user_123"
+	}
 	replyText, err := s.Supervisor.HandleConfirmation(r.Context(), req.TurnID, req.SessionID, userID, req.Text)
 	if err != nil {
 		replyText = "Transaction confirmation failed."
@@ -298,7 +306,10 @@ func (s *OrchestratorServer) handleConfirmation(w http.ResponseWriter, r *http.R
 
 func (s *OrchestratorServer) handleBankData(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := "mock_user_123"
+	userID := r.URL.Query().Get("user_id")
+	if userID == "" {
+		userID = "mock_user_123"
+	}
 
 	balance, currency, err := s.Mongo.GetBalance(ctx, userID)
 	if err != nil {
@@ -369,6 +380,19 @@ func withLogging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		next.ServeHTTP(w, r)
-		log.Printf("[Orchestrator HTTP] %s %s took %v", r.Method, r.URL.Path, time.Since(start))
+		
+		duration := time.Since(start)
+		logRecord := telemetry.StructuredLog{
+			Timestamp:   time.Now(),
+			Level:       "INFO",
+			Message:     "HTTP request completed",
+			Logger:      "http",
+			Duration:    duration.String(),
+			DurationMS:  duration.Milliseconds(),
+			DBSystem:    r.Method,
+			DBOperation: r.URL.Path,
+		}
+		
+		telemetry.Logger("http").InfoContext(r.Context(), "http_request", slog.Any("details", logRecord))
 	})
 }

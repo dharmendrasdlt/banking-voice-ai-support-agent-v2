@@ -148,8 +148,13 @@ func (s *MediaEngineServer) handleWebSocket(w http.ResponseWriter, r *http.Reque
 	}
 	defer ws.Close()
 
+	userID := r.URL.Query().Get("user_id")
+	if userID == "" {
+		userID = "mock_user_123"
+	}
+
 	sessionID := fmt.Sprintf("sess-%d", time.Now().Unix())
-	log.Printf("[Session %s] Customer connected directly to Media Engine", sessionID)
+	log.Printf("[Session %s] Customer connected directly to Media Engine. User: %s", sessionID, userID)
 
 	// Live call visibility (gauge + logs), independent of any trace.
 	logger := telemetry.Logger("media-engine")
@@ -212,6 +217,7 @@ func (s *MediaEngineServer) handleWebSocket(w http.ResponseWriter, r *http.Reque
 					"session_id": sessionID,
 					"turn_id":    m.TurnID,
 					"text":       m.Text,
+					"user_id":    userID,
 				})
 				req, err := http.NewRequestWithContext(ctx, "POST", s.OrchestratorURL+"/api/partial", bytes.NewBuffer(reqBody))
 				if err != nil {
@@ -269,6 +275,7 @@ func (s *MediaEngineServer) handleWebSocket(w http.ResponseWriter, r *http.Reque
 				"session_id": sessionID,
 				"turn_id":    msg.TurnID,
 				"text":       msg.Text,
+				"user_id":    userID,
 			})
 			req, err := http.NewRequestWithContext(ctx, "POST", s.OrchestratorURL+"/api/final", bytes.NewBuffer(reqBody))
 			if err != nil {
@@ -324,7 +331,20 @@ func (s *MediaEngineServer) handleWebSocket(w http.ResponseWriter, r *http.Reque
 							"text":       replyText,
 							"latency_ms": elapsedMs,
 						})
-						log.Printf("[MediaEngine Turn Latency] session_id: %s, turn_id: %s, latency: %dms, path: %s", sessionID, msg.TurnID, elapsedMs, pathType)
+						
+						logRecord := telemetry.StructuredLog{
+							Timestamp:           time.Now(),
+							Level:               "INFO",
+							Message:             "WebSocket turn completed",
+							Logger:              "media-engine",
+							Duration:            fmt.Sprintf("%dms", elapsedMs),
+							DurationMS:          elapsedMs,
+							PostSpeechLatencyMS: elapsedMs,
+							SessionID:           sessionID,
+							TurnID:              msg.TurnID,
+							DBOperation:         pathType,
+						}
+						telemetry.Logger("media-engine").InfoContext(ctx, "websocket_turn", slog.Any("details", logRecord))
 
 						// Send logs back to frontend UI
 						_ = ws.WriteJSON(map[string]any{
@@ -349,7 +369,7 @@ func (s *MediaEngineServer) handleWebSocket(w http.ResponseWriter, r *http.Reque
 						})
 
 						// Send bank update trigger to UI
-						s.fetchAndSendBankData(ws)
+						s.fetchAndSendBankData(ws, userID)
 					} else {
 						// Forward the intermediate chunks (thought, speech) directly to WebSocket
 						_ = ws.WriteJSON(chunk)
@@ -371,6 +391,7 @@ func (s *MediaEngineServer) handleWebSocket(w http.ResponseWriter, r *http.Reque
 				"session_id": sessionID,
 				"turn_id":    msg.TurnID,
 				"text":       msg.Text,
+				"user_id":    userID,
 			})
 			req, err := http.NewRequestWithContext(ctx, "POST", s.OrchestratorURL+"/api/confirmation", bytes.NewBuffer(reqBody))
 			if err != nil {
@@ -395,7 +416,20 @@ func (s *MediaEngineServer) handleWebSocket(w http.ResponseWriter, r *http.Reque
 					"text":       replyText,
 					"latency_ms": elapsedMs,
 				})
-				log.Printf("[MediaEngine Confirmation Latency] session_id: %s, turn_id: %s, latency: %dms", sessionID, msg.TurnID, elapsedMs)
+				
+				logRecord := telemetry.StructuredLog{
+					Timestamp:           time.Now(),
+					Level:               "INFO",
+					Message:             "WebSocket confirmation completed",
+					Logger:              "media-engine",
+					Duration:            fmt.Sprintf("%dms", elapsedMs),
+					DurationMS:          elapsedMs,
+					PostSpeechLatencyMS: elapsedMs,
+					SessionID:           sessionID,
+					TurnID:              msg.TurnID,
+					DBOperation:         "confirmation",
+				}
+				telemetry.Logger("media-engine").InfoContext(ctx, "websocket_confirmation", slog.Any("details", logRecord))
 
 				_ = ws.WriteJSON(map[string]any{
 					"type":  "log_event",
@@ -407,7 +441,7 @@ func (s *MediaEngineServer) handleWebSocket(w http.ResponseWriter, r *http.Reque
 					},
 				})
 
-				s.fetchAndSendBankData(ws)
+				s.fetchAndSendBankData(ws, userID)
 			}
 		}
 	}
@@ -425,8 +459,8 @@ func (s *MediaEngineServer) forwardConfig(payload any) {
 	resp.Body.Close()
 }
 
-func (s *MediaEngineServer) fetchAndSendBankData(ws *websocket.Conn) {
-	resp, err := s.HTTPClient.Get(s.OrchestratorURL + "/api/bank-data")
+func (s *MediaEngineServer) fetchAndSendBankData(ws *websocket.Conn, userID string) {
+	resp, err := s.HTTPClient.Get(s.OrchestratorURL + "/api/bank-data?user_id=" + userID)
 	if err != nil {
 		return
 	}
