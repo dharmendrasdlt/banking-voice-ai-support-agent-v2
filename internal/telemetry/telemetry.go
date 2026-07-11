@@ -125,6 +125,20 @@ func Logger(name string) *slog.Logger {
 	return otelslog.NewLogger(name)
 }
 
+type contextKey string
+
+const (
+	SessionIDKey contextKey = "session_id"
+	TurnIDKey    contextKey = "turn_id"
+)
+
+// WithTraceContext returns a new context carrying the session and turn IDs.
+func WithTraceContext(ctx context.Context, sessionID, turnID string) context.Context {
+	ctx = context.WithValue(ctx, SessionIDKey, sessionID)
+	ctx = context.WithValue(ctx, TurnIDKey, turnID)
+	return ctx
+}
+
 type loggingSpan struct {
 	trace.Span
 	ctx   context.Context
@@ -206,6 +220,14 @@ func (s *loggingSpan) End(options ...trace.SpanEndOption) {
 // Step starts a span AND returns a trace.Span. When End() is called on the span,
 // it emits a trace-correlated log line containing the final duration.
 func Step(ctx context.Context, name string, attrs ...attribute.KeyValue) (context.Context, trace.Span) {
+	// Propagate session and turn IDs from context if available
+	if sess, ok := ctx.Value(SessionIDKey).(string); ok && sess != "" {
+		attrs = append(attrs, attribute.String("session_id", sess))
+	}
+	if turn, ok := ctx.Value(TurnIDKey).(string); ok && turn != "" {
+		attrs = append(attrs, attribute.String("turn_id", turn))
+	}
+
 	var spanOpts []trace.SpanStartOption
 	if len(attrs) > 0 {
 		spanOpts = append(spanOpts, trace.WithAttributes(attrs...))

@@ -19,7 +19,6 @@ import (
 	"banking-voice-ai-agent/internal/telemetry"
 
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
 )
 
 type SessionState string
@@ -254,10 +253,9 @@ func (s *TurnSupervisor) HandleFinalTranscript(ctx context.Context, turnID strin
 	defer s.mu.Unlock()
 
 	// Start OTel turn span
-	ctx, span := telemetry.Tracer("orchestrator").Start(ctx, "turn",
-		trace.WithAttributes(
-			attribute.String("turn_id", turnID),
-		))
+	ctx, span := telemetry.Step(ctx, "turn",
+		attribute.String("turn_id", turnID),
+	)
 	defer span.End()
 
 	log.Printf("[Supervisor] Handling final transcript (intercepted: %t)", intercepted)

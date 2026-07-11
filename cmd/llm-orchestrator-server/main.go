@@ -162,11 +162,13 @@ func (s *OrchestratorServer) handlePartial(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	ctx := telemetry.WithTraceContext(r.Context(), req.SessionID, req.TurnID)
+
 	s.mu.Lock()
 	if oldCancel, ok := s.warmingCancel[req.SessionID]; ok {
 		oldCancel()
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	cancelCtx, cancel := context.WithCancel(ctx)
 	s.warmingCancel[req.SessionID] = cancel
 	s.mu.Unlock()
 
@@ -179,10 +181,10 @@ func (s *OrchestratorServer) handlePartial(w http.ResponseWriter, r *http.Reques
 			messages := []ollama.ChatMessage{{Role: "user", Content: text}}
 			_, _ = s.Ollama.Chat(wCtx, messages, false, nil)
 		}
-	}(ctx, warmDone, req.Text)
+	}(cancelCtx, warmDone, req.Text)
 
 	// Branch B: cache probe
-	isHalted, matchedAction := s.Supervisor.HandleStablePartial(context.Background(), req.TurnID, req.SessionID, req.Text, cancel, warmDone)
+	isHalted, matchedAction := s.Supervisor.HandleStablePartial(cancelCtx, req.TurnID, req.SessionID, req.Text, cancel, warmDone)
 
 	resp := map[string]any{
 		"halt":           isHalted,
@@ -200,6 +202,8 @@ func (s *OrchestratorServer) handleFinal(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	ctx := telemetry.WithTraceContext(r.Context(), req.SessionID, req.TurnID)
+
 	s.mu.Lock()
 	if cancel, ok := s.warmingCancel[req.SessionID]; ok {
 		cancel()
@@ -209,7 +213,7 @@ func (s *OrchestratorServer) handleFinal(w http.ResponseWriter, r *http.Request)
 
 	// Check if this session is awaiting transaction confirmation
 	confirmKey := fmt.Sprintf("session:%s:confirm", req.SessionID)
-	hasPendingConfirm, _ := s.Redis.Client.Exists(r.Context(), confirmKey).Result()
+	hasPendingConfirm, _ := s.Redis.Client.Exists(ctx, confirmKey).Result()
 
 	w.Header().Set("Content-Type", "application/x-ndjson")
 	w.Header().Set("Transfer-Encoding", "chunked")
@@ -239,9 +243,9 @@ func (s *OrchestratorServer) handleFinal(w http.ResponseWriter, r *http.Request)
 
 	if hasPendingConfirm > 0 {
 		pathType = "confirmation"
-		replyText, err = s.Supervisor.HandleConfirmation(r.Context(), req.TurnID, req.SessionID, userID, req.Text)
+		replyText, err = s.Supervisor.HandleConfirmation(ctx, req.TurnID, req.SessionID, userID, req.Text)
 	} else {
-		pathType, replyText, err = s.Supervisor.HandleFinalTranscript(r.Context(), req.TurnID, req.SessionID, userID, req.Text, false, nil, func(eventType string, text string) {
+		pathType, replyText, err = s.Supervisor.HandleFinalTranscript(ctx, req.TurnID, req.SessionID, userID, req.Text, false, nil, func(eventType string, text string) {
 			writeChunk(eventType, text)
 		})
 	}
@@ -253,7 +257,7 @@ func (s *OrchestratorServer) handleFinal(w http.ResponseWriter, r *http.Request)
 
 	// Update conversation context history and log to Cassandra
 	go func() {
-		histCtx := context.Background()
+		histCtx := telemetry.WithTraceContext(context.Background(), req.SessionID, req.TurnID)
 		_, _ = s.Supervisor.ContextManager.AppendAndSave(histCtx, req.SessionID, req.Text, replyText)
 
 		// Log to Cassandra durable event history store
@@ -281,17 +285,19 @@ func (s *OrchestratorServer) handleConfirmation(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	ctx := telemetry.WithTraceContext(r.Context(), req.SessionID, req.TurnID)
+
 	userID := req.UserID
 	if userID == "" {
 		userID = "mock_user_123"
 	}
-	replyText, err := s.Supervisor.HandleConfirmation(r.Context(), req.TurnID, req.SessionID, userID, req.Text)
+	replyText, err := s.Supervisor.HandleConfirmation(ctx, req.TurnID, req.SessionID, userID, req.Text)
 	if err != nil {
 		replyText = "Transaction confirmation failed."
 	}
 	// Log confirmation outcomes to Cassandra
 	go func() {
-		histCtx := context.Background()
+		histCtx := telemetry.WithTraceContext(context.Background(), req.SessionID, req.TurnID)
 		s.Supervisor.LogConversationTurn(histCtx, userID, req.SessionID, "user", req.Text, "confirmation", "", "")
 		s.Supervisor.LogConversationTurn(histCtx, userID, req.SessionID, "assistant", replyText, "confirmation", "", "")
 	}()

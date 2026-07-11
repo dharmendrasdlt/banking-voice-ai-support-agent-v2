@@ -207,7 +207,8 @@ func (s *MediaEngineServer) handleWebSocket(w http.ResponseWriter, r *http.Reque
 		case "partial_transcript":
 			// Post partial transcript to orchestrator
 			go func(m ClientWSMessage) {
-				ctx, span := telemetry.Step(context.Background(), "media.partial_transcript",
+				tCtx := telemetry.WithTraceContext(context.Background(), sessionID, m.TurnID)
+				ctx, span := telemetry.Step(tCtx, "media.partial_transcript",
 					attribute.String("media.session_id", sessionID),
 					attribute.String("media.turn_id", m.TurnID),
 				)
@@ -264,7 +265,8 @@ func (s *MediaEngineServer) handleWebSocket(w http.ResponseWriter, r *http.Reque
 
 		case "final_transcript":
 			func() {
-				ctx, span := telemetry.Step(r.Context(), "media.final_transcript",
+				tCtx := telemetry.WithTraceContext(r.Context(), sessionID, msg.TurnID)
+				ctx, span := telemetry.Step(tCtx, "media.final_transcript",
 					attribute.String("media.session_id", sessionID),
 					attribute.String("media.turn_id", msg.TurnID),
 				)
@@ -386,7 +388,8 @@ func (s *MediaEngineServer) handleWebSocket(w http.ResponseWriter, r *http.Reque
 
 		case "confirmation":
 			func() {
-				ctx, span := telemetry.Step(r.Context(), "media.confirmation",
+				tCtx := telemetry.WithTraceContext(r.Context(), sessionID, msg.TurnID)
+				ctx, span := telemetry.Step(tCtx, "media.confirmation",
 					attribute.String("media.session_id", sessionID),
 					attribute.String("media.turn_id", msg.TurnID),
 					attribute.String("media.value", msg.Text),
