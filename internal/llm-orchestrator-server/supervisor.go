@@ -371,7 +371,7 @@ func (s *TurnSupervisor) HandleFinalTranscript(ctx context.Context, turnID strin
 
 		recordTurn(ctx, "faq")
 		// FAQs are static and safe. No private info is contained, so it passes guardrails.
-		return "text", answer, nil
+		return "faq", answer, nil
 	}
 
 	// Precedence 3: LLM Fallthrough (MISS)
@@ -413,20 +413,20 @@ func (s *TurnSupervisor) HandleFinalTranscript(ctx context.Context, turnID strin
 					formattedText = res.ResponseText
 				}
 				safeText := s.ApplyOutputGuardrailFilter(formattedText, res.ResponseText)
-				return "text", safeText, nil
+				return "llm", safeText, nil
 			} else if res.Status == "resume_playback" {
 				return "resume_playback", "", nil
 			}
 		} else {
 			log.Printf("[Supervisor] ToolCallAuditService error: %v (cleaned response was: %s)", err, cleanedResponse)
-			return "text", "I'm sorry, I encountered a validation check error.", nil
+			return "llm", "I'm sorry, I encountered a validation check error.", nil
 		}
 	}
 
 	// Run output guardrail filter to block un-sourced values
 	safeText := s.ApplyOutputGuardrailFilter(response, "")
 
-	return "text", safeText, nil
+	return "llm", safeText, nil
 }
 
 // executeCommitPath handles executing the action path or scheduling confirmation
