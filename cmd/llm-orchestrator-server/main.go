@@ -226,10 +226,7 @@ func (s *OrchestratorServer) handleFinal(w http.ResponseWriter, r *http.Request)
 	// Update conversation context history and log to Cassandra
 	go func() {
 		histCtx := context.Background()
-		hist, _ := s.Redis.GetSessionContext(histCtx, req.SessionID)
-		hist = append(hist, ollama.ChatMessage{Role: "user", Content: req.Text})
-		hist = append(hist, ollama.ChatMessage{Role: "assistant", Content: replyText})
-		_ = s.Redis.SaveSessionContext(histCtx, req.SessionID, hist)
+		_, _ = s.Supervisor.ContextManager.AppendAndSave(histCtx, req.SessionID, req.Text, replyText)
 
 		// Log to Cassandra durable event history store
 		s.Supervisor.LogConversationTurn(histCtx, userID, req.SessionID, "user", req.Text, "", "", "")

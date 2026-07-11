@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"banking-voice-ai-agent/internal/audit"
+	"banking-voice-ai-agent/internal/contextmanager"
 	"banking-voice-ai-agent/internal/db"
 	"banking-voice-ai-agent/internal/mcp"
 	"banking-voice-ai-agent/internal/ollama"
@@ -39,12 +40,13 @@ type ConfirmationContext struct {
 }
 
 type TurnSupervisor struct {
-	Redis        *db.RedisManager
-	Qdrant       *db.QdrantManager
-	Cassandra    *db.CassandraManager
-	Ollama       *ollama.Client
-	MCP          *mcp.BankingMCPServer
-	AuditService *audit.ToolCallAuditService
+	Redis          *db.RedisManager
+	Qdrant         *db.QdrantManager
+	Cassandra      *db.CassandraManager
+	Ollama         *ollama.Client
+	MCP            *mcp.BankingMCPServer
+	AuditService   *audit.ToolCallAuditService
+	ContextManager *contextmanager.ContextManager
 
 	// Configurations
 	ExtremeThreshold float64
@@ -63,6 +65,7 @@ func NewTurnSupervisor(r *db.RedisManager, q *db.QdrantManager, o *ollama.Client
 		Ollama:           o,
 		MCP:              m,
 		AuditService:     audit.NewToolCallAuditService(m, r),
+		ContextManager:   contextmanager.NewContextManager(r),
 		ExtremeThreshold: 0.96, // Cosine score >= 0.96 for halt
 		NormalThreshold:  0.94, // Cosine score >= 0.94 for final dispatch
 		WarmingEnabled:   true, // enabled by default
@@ -254,10 +257,10 @@ func (s *TurnSupervisor) HandleFinalTranscript(ctx context.Context, turnID strin
 
 	log.Printf("[Supervisor] Handling final transcript (intercepted: %t)", intercepted)
 
-	// Fetch conversation history from Redis
-	history, err := s.Redis.GetSessionContext(ctx, sessionID)
+	// Fetch conversation history from Redis via ContextManager
+	history, err := s.ContextManager.GetContext(ctx, sessionID)
 	if err != nil {
-		log.Printf("Failed to load history from Redis: %v", err)
+		log.Printf("Failed to load history from ContextManager: %v", err)
 	}
 
 	// Determine if we should bypass the cache (short/one-word answers in an active conversation are context-dependent)
