@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -162,7 +163,7 @@ func (c *Client) Chat(ctx context.Context, messages []ChatMessage, stream bool, 
 					if err == io.EOF {
 						return
 					}
-					// Log error but don't panic
+					log.Printf("[Ollama] Stream decoding error: %v", err)
 					return
 				}
 				if chunk.Message.Content != "" {

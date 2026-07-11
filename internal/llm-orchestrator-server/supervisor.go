@@ -618,13 +618,19 @@ func (s *TurnSupervisor) runLLMDeflector(ctx context.Context, sessionID string, 
 	messages = append(messages, ollama.ChatMessage{Role: "user", Content: query})
 
 	responseChan := make(chan string, 10)
+	var chatErr error
 	go func() {
-		_, _ = s.Ollama.Chat(ctx, messages, true, responseChan)
+		_, chatErr = s.Ollama.Chat(ctx, messages, true, responseChan)
 	}()
 
 	var fullResponse strings.Builder
 	for token := range responseChan {
 		fullResponse.WriteString(token)
+	}
+
+	if chatErr != nil {
+		log.Printf("[Supervisor] Ollama Chat error in runLLMDeflector: %v", chatErr)
+		return "", chatErr
 	}
 
 	return fullResponse.String(), nil
@@ -794,13 +800,19 @@ func (s *TurnSupervisor) formatLLMResponse(ctx context.Context, query string, mc
 	}
 	
 	responseChan := make(chan string, 10)
+	var chatErr error
 	go func() {
-		_, _ = s.Ollama.Chat(ctx, messages, true, responseChan)
+		_, chatErr = s.Ollama.Chat(ctx, messages, true, responseChan)
 	}()
 	
 	var llmResponse strings.Builder
 	for token := range responseChan {
 		llmResponse.WriteString(token)
+	}
+
+	if chatErr != nil {
+		log.Printf("[Supervisor] Ollama Chat error in formatLLMResponse: %v", chatErr)
+		return "", chatErr
 	}
 	return llmResponse.String(), nil
 }
