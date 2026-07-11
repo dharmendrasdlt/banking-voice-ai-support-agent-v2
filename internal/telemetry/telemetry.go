@@ -141,12 +141,17 @@ func (s *loggingSpan) End(options ...trace.SpanEndOption) {
 	spanContext := trace.SpanContextFromContext(s.ctx)
 
 	logRecord := StructuredLog{
-		Timestamp:  time.Now(),
-		Level:      "INFO",
-		Message:    s.name,
-		Logger:     "app",
-		Duration:   duration.String(),
-		DurationMS: duration.Milliseconds(),
+		Timestamp:           time.Now(),
+		Level:               "INFO",
+		Message:             s.name,
+		Logger:              "app",
+		Duration:            duration.String(),
+		DurationMS:          duration.Milliseconds(),
+		PostSpeechLatencyMS: 0,
+	}
+
+	if s.name == "media.final_transcript" || s.name == "media.confirmation" {
+		logRecord.PostSpeechLatencyMS = duration.Milliseconds()
 	}
 
 	if spanContext.IsValid() {

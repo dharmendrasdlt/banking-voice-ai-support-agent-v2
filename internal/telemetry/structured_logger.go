@@ -1,6 +1,9 @@
 package telemetry
 
-import "time"
+import (
+	"log/slog"
+	"time"
+)
 
 // StructuredLog represents the JSON structure of logs emitted
 // to Loki/slog containing trace details, latency metrics, and DB metadata.
@@ -45,4 +48,82 @@ type StructuredLog struct {
 	// Ollama LLM Trace Attributes
 	OllamaModel       string `json:"ollama.model,omitempty"`
 	OllamaNumMessages int    `json:"ollama.num_messages,omitempty"`
+}
+
+// LogValue implements slog.LogValuer to ensure correct JSON tag naming
+// and omitempty behavior even under reflection-based OTel slog exporters.
+func (l StructuredLog) LogValue() slog.Value {
+	var attrs []slog.Attr
+
+	if !l.Timestamp.IsZero() {
+		attrs = append(attrs, slog.Time("time", l.Timestamp))
+	}
+	if l.Level != "" {
+		attrs = append(attrs, slog.String("level", l.Level))
+	}
+	if l.Message != "" {
+		attrs = append(attrs, slog.String("msg", l.Message))
+	}
+	if l.Logger != "" {
+		attrs = append(attrs, slog.String("logger", l.Logger))
+	}
+	if l.TraceID != "" {
+		attrs = append(attrs, slog.String("trace_id", l.TraceID))
+	}
+	if l.SpanID != "" {
+		attrs = append(attrs, slog.String("span_id", l.SpanID))
+	}
+	if l.Duration != "" {
+		attrs = append(attrs, slog.String("duration", l.Duration))
+	}
+	if l.DurationMS != 0 {
+		attrs = append(attrs, slog.Int64("duration_ms", l.DurationMS))
+	}
+	if l.PostSpeechLatencyMS != 0 {
+		attrs = append(attrs, slog.Int64("post_speech_latency_ms", l.PostSpeechLatencyMS))
+	}
+	if l.SessionID != "" {
+		attrs = append(attrs, slog.String("session_id", l.SessionID))
+	}
+	if l.TurnID != "" {
+		attrs = append(attrs, slog.String("turn_id", l.TurnID))
+	}
+	if l.DBSystem != "" {
+		attrs = append(attrs, slog.String("db.system", l.DBSystem))
+	}
+	if l.DBCollection != "" {
+		attrs = append(attrs, slog.String("db.collection", l.DBCollection))
+	}
+	if l.DBOperation != "" {
+		attrs = append(attrs, slog.String("db.operation", l.DBOperation))
+	}
+	if l.DBLimit != 0 {
+		attrs = append(attrs, slog.Int64("db.limit", l.DBLimit))
+	}
+	if l.RedisKeyType != "" {
+		attrs = append(attrs, slog.String("redis.key_type", l.RedisKeyType))
+	}
+	if l.RedisOperation != "" {
+		attrs = append(attrs, slog.String("redis.operation", l.RedisOperation))
+	}
+	if l.RedisStream != "" {
+		attrs = append(attrs, slog.String("redis.stream", l.RedisStream))
+	}
+	if l.RedisEventType != "" {
+		attrs = append(attrs, slog.String("redis.event_type", l.RedisEventType))
+	}
+	if l.QdrantCollection != "" {
+		attrs = append(attrs, slog.String("qdrant.collection", l.QdrantCollection))
+	}
+	if l.MCPTool != "" {
+		attrs = append(attrs, slog.String("mcp.tool", l.MCPTool))
+	}
+	if l.OllamaModel != "" {
+		attrs = append(attrs, slog.String("ollama.model", l.OllamaModel))
+	}
+	if l.OllamaNumMessages != 0 {
+		attrs = append(attrs, slog.Int("ollama.num_messages", l.OllamaNumMessages))
+	}
+
+	return slog.GroupValue(attrs...)
 }
