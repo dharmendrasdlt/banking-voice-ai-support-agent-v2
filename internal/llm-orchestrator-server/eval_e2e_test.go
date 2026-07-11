@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 func TestEndToEndConversationalEvaluation(t *testing.T) {
@@ -470,5 +472,143 @@ func TestHindiAndBlockCardConversationalE2E(t *testing.T) {
 	}
 
 	t.Log("=== HINDI & BLOCK-CARD E2E CONVERSATIONAL EVALUATION COMPLETED ===")
+}
+
+func TestFullPipelineConversationalE2E(t *testing.T) {
+	// Target the NGINX load balancer exposed on port 9090 on the host
+	wsURL := os.Getenv("E2E_WS_URL")
+	if wsURL == "" {
+		wsURL = "ws://localhost:9090/ws"
+	}
+
+	t.Logf("=== STARTING FULL PIPELINE WEBSOCKET E2E CONVERSATIONAL EVALUATION (URL: %s) ===", wsURL)
+
+	// Dial WebSocket connection
+	dialer := websocket.DefaultDialer
+	ws, resp, err := dialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("Failed to establish WebSocket connection to %s: %v", wsURL, err)
+	}
+	defer ws.Close()
+	resp.Body.Close()
+
+	// Read initial greeting
+	_, firstMsgBytes, err := ws.ReadMessage()
+	if err != nil {
+		t.Fatalf("Failed to read initial greeting: %v", err)
+	}
+	var greeting map[string]any
+	if err := json.Unmarshal(firstMsgBytes, &greeting); err != nil {
+		t.Fatalf("Failed to unmarshal initial greeting: %v", err)
+	}
+	t.Logf("[WS Welcome] Type: %s, Text: %q", greeting["type"], greeting["text"])
+	if greeting["type"] != "agent_speech" || !strings.Contains(greeting["text"].(string), "welcome back to ICICI Bank support") {
+		t.Errorf("Unexpected welcome greeting: %+v", greeting)
+	}
+
+	turns := []struct {
+		Query               string
+		ExpectedType        string // expected WS message type
+		VerifyResponse      func(t *testing.T, text string, thoughts []string, speech []string)
+	}{
+		// Turn 1: Check balance
+		{
+			Query:        "my balance",
+			ExpectedType: "agent_speech",
+			VerifyResponse: func(t *testing.T, text string, thoughts []string, speech []string) {
+				lower := strings.ToLower(text)
+				if !strings.Contains(lower, "4,567.89") && !strings.Contains(lower, "4567.89") {
+					t.Errorf("Balance missing in response: %s", text)
+				}
+			},
+		},
+		// Turn 2: Hindi greeting
+		{
+			Query:        "namaste",
+			ExpectedType: "agent_speech",
+			VerifyResponse: func(t *testing.T, text string, thoughts []string, speech []string) {
+				hasHindi := false
+				for _, r := range text {
+					if r >= 0x0900 && r <= 0x097F {
+						hasHindi = true
+						break
+					}
+				}
+				if !hasHindi {
+					t.Errorf("Expected Hindi response in Devnagari but got: %q", text)
+				}
+			},
+		},
+		// Turn 3: Transfer money (triggers confirm_required)
+		{
+			Query:        "transfer 500 to account 987654",
+			ExpectedType: "confirmation_required",
+			VerifyResponse: func(t *testing.T, text string, thoughts []string, speech []string) {
+				lower := strings.ToLower(text)
+				if !strings.Contains(lower, "confirm") || !strings.Contains(lower, "987654") || !strings.Contains(lower, "500") {
+					t.Errorf("Failed to trigger confirmation prompt: %q", text)
+				}
+			},
+		},
+	}
+
+	for idx, turn := range turns {
+		turnNum := idx + 1
+		t.Logf("\n--- Pipeline Turn %d: User: %q ---", turnNum, turn.Query)
+
+		// Send final transcript over WebSocket
+		payload := map[string]any{
+			"type":    "final_transcript",
+			"turn_id": fmt.Sprintf("pipeline-turn-%d", turnNum),
+			"text":    turn.Query,
+		}
+		if err := ws.WriteJSON(payload); err != nil {
+			t.Fatalf("Failed to write WebSocket message at Turn %d: %v", turnNum, err)
+		}
+
+		startTime := time.Now()
+		var thoughts []string
+		var speech []string
+		var finalReply string
+		var finalType string
+
+		// Read streamed response chunks until we get the final message type
+		for {
+			_, msgBytes, err := ws.ReadMessage()
+			if err != nil {
+				t.Fatalf("Failed to read WebSocket message at Turn %d: %v", turnNum, err)
+			}
+
+			var chunk map[string]any
+			if err := json.Unmarshal(msgBytes, &chunk); err == nil {
+				cType, _ := chunk["type"].(string)
+				cText, _ := chunk["text"].(string)
+
+				if cType == "thought" {
+					thoughts = append(thoughts, cText)
+					t.Logf("[WS Thought Chunk] %s", cText)
+				} else if cType == "speech" {
+					speech = append(speech, cText)
+					t.Logf("[WS Speech Chunk] %s", cText)
+				} else if cType == "agent_speech" || cType == "confirmation_required" || cType == "resume_playback" {
+					finalReply = cText
+					finalType = cType
+					break
+				}
+			}
+		}
+
+		latency := time.Since(startTime)
+		t.Logf("[WS Result] Final Type: %s, Latency: %v", finalType, latency)
+		t.Logf("[WS Agent Reply]: %q", finalReply)
+
+		if finalType != turn.ExpectedType {
+			t.Errorf("Pipeline Turn %d failed: Expected type %q, got %q", turnNum, turn.ExpectedType, finalType)
+		}
+
+		turn.VerifyResponse(t, finalReply, thoughts, speech)
+	}
+
+	t.Log("=== FULL PIPELINE WEBSOCKET E2E CONVERSATIONAL EVALUATION COMPLETED ===")
 }
 
