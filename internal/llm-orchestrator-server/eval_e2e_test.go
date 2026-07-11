@@ -612,3 +612,308 @@ func TestFullPipelineConversationalE2E(t *testing.T) {
 	t.Log("=== FULL PIPELINE WEBSOCKET E2E CONVERSATIONAL EVALUATION COMPLETED ===")
 }
 
+func TestStressLongConversationalFlowE2E(t *testing.T) {
+	baseURL := os.Getenv("E2E_BASE_URL")
+	if baseURL == "" {
+		baseURL = "http://localhost:9090/orchestrator"
+	}
+
+	sessionID := fmt.Sprintf("e2e-stress-sess-%d", time.Now().Unix())
+	t.Logf("=== STARTING 15-TURN STRESS CONVERSATIONAL EVALUATION (Session: %s) ===", sessionID)
+
+	client := &http.Client{
+		Timeout: 60 * time.Second,
+	}
+
+	turns := []struct {
+		Query               string
+		ExpectedPathType    string
+		VerifyResponse      func(t *testing.T, text string)
+		IsConfirmationTurn  bool
+		SimulateHalt        bool
+	}{
+		// Turn 1: hello
+		{
+			Query:            "hello",
+			ExpectedPathType: "llm",
+			VerifyResponse: func(t *testing.T, text string) {
+				lower := strings.ToLower(text)
+				if !strings.Contains(lower, "hello") && !strings.Contains(lower, "hi") {
+					t.Errorf("Unexpected greeting: %q", text)
+				}
+			},
+		},
+		// Turn 2: my balance (Simulate early halt!)
+		{
+			Query:            "my balance",
+			ExpectedPathType: "llm",
+			SimulateHalt:     true,
+			VerifyResponse: func(t *testing.T, text string) {
+				lower := strings.ToLower(text)
+				if !strings.Contains(lower, "4,567.89") && !strings.Contains(lower, "4567.89") {
+					t.Errorf("Balance missing in response: %q", text)
+				}
+			},
+		},
+		// Turn 3: out-of-scope query
+		{
+			Query:            "who is Michael Jackson",
+			ExpectedPathType: "llm",
+			VerifyResponse: func(t *testing.T, text string) {
+				lower := strings.ToLower(text)
+				if !strings.Contains(lower, "representative") && !strings.Contains(lower, "look that up") {
+					t.Errorf("Failed to deflect out-of-scope query: %q", text)
+				}
+			},
+		},
+		// Turn 4: Hindi query
+		{
+			Query:            "mera balance kya hai",
+			ExpectedPathType: "llm",
+			VerifyResponse: func(t *testing.T, text string) {
+				hasHindi := false
+				for _, r := range text {
+					if r >= 0x0900 && r <= 0x097F {
+						hasHindi = true
+						break
+					}
+				}
+				if !hasHindi {
+					t.Errorf("Response is not in Devnagari Hindi: %q", text)
+				}
+			},
+		},
+		// Turn 5: block my card (confirm required)
+		{
+			Query:            "block my credit card",
+			ExpectedPathType: "confirm_required",
+			VerifyResponse: func(t *testing.T, text string) {
+				lower := strings.ToLower(text)
+				if !strings.Contains(lower, "confirm") && !strings.Contains(text, "ब्लॉक") {
+					t.Errorf("Expected block confirmation prompt: %q", text)
+				}
+			},
+		},
+		// Turn 6: no wait (cancel confirmation)
+		{
+			Query:            "no wait",
+			ExpectedPathType: "confirmation",
+			IsConfirmationTurn: true,
+			VerifyResponse: func(t *testing.T, text string) {
+				lower := strings.ToLower(text)
+				if !strings.Contains(lower, "cancel") && !strings.Contains(lower, "ok") && !strings.Contains(lower, "wait") {
+					t.Errorf("Failed to cancel block card saga: %q", text)
+				}
+			},
+		},
+		// Turn 7: resume (resume_playback)
+		{
+			Query:            "resume",
+			ExpectedPathType: "resume_playback",
+			VerifyResponse: func(t *testing.T, text string) {
+			},
+		},
+		// Turn 8: show my transactions
+		{
+			Query:            "show my transactions",
+			ExpectedPathType: "llm",
+			VerifyResponse: func(t *testing.T, text string) {
+				lower := strings.ToLower(text)
+				if !strings.Contains(lower, "grocery") && !strings.Contains(lower, "electricity") {
+					t.Errorf("Transactions missing records: %q", text)
+				}
+			},
+		},
+		// Turn 9: what was the amount of my grocery store? (Rule #2 context lookup)
+		{
+			Query:            "what was the amount of my grocery store?",
+			ExpectedPathType: "llm",
+			VerifyResponse: func(t *testing.T, text string) {
+				lower := strings.ToLower(text)
+				if !strings.Contains(lower, "150") {
+					t.Errorf("Failed to retrieve grocery amount from context: %q", text)
+				}
+				if strings.Contains(lower, "representative") {
+					t.Error("Guardrail filter tripped on context lookup")
+				}
+			},
+		},
+		// Turn 10: transfer 300 to account 987654 (confirm required)
+		{
+			Query:            "transfer 300 to account 987654",
+			ExpectedPathType: "confirm_required",
+			VerifyResponse: func(t *testing.T, text string) {
+				lower := strings.ToLower(text)
+				if !strings.Contains(lower, "confirm") || !strings.Contains(lower, "987654") || !strings.Contains(lower, "300") {
+					t.Errorf("Failed to trigger transfer confirmation: %q", text)
+				}
+			},
+		},
+		// Turn 11: yes (execute transfer)
+		{
+			Query:            "yes",
+			ExpectedPathType: "confirmation",
+			IsConfirmationTurn: true,
+			VerifyResponse: func(t *testing.T, text string) {
+				lower := strings.ToLower(text)
+				if !strings.Contains(lower, "transfer") && !strings.Contains(lower, "complete") && !strings.Contains(lower, "success") && !strings.Contains(lower, "ok") {
+					t.Errorf("Failed to complete transfer: %q", text)
+				}
+			},
+		},
+		// Turn 12: did the transfer succeed? (Rule #2 history context reuse)
+		{
+			Query:            "did the transfer succeed?",
+			ExpectedPathType: "llm",
+			VerifyResponse: func(t *testing.T, text string) {
+				lower := strings.ToLower(text)
+				if !strings.Contains(lower, "yes") && !strings.Contains(lower, "succeed") && !strings.Contains(lower, "complete") && !strings.Contains(lower, "success") {
+					t.Errorf("Failed to retrieve transfer status from history: %q", text)
+				}
+				if strings.Contains(lower, "representative") {
+					t.Error("Guardrail filter tripped on history context query")
+				}
+			},
+		},
+		// Turn 13: block my debit card
+		{
+			Query:            "block my debit card",
+			ExpectedPathType: "confirm_required",
+			VerifyResponse: func(t *testing.T, text string) {
+				lower := strings.ToLower(text)
+				if !strings.Contains(lower, "confirm") && !strings.Contains(lower, "debit") {
+					t.Errorf("Failed to prompt block debit card: %q", text)
+				}
+			},
+		},
+		// Turn 14: yes (confirm block debit card)
+		{
+			Query:            "yes",
+			ExpectedPathType: "confirmation",
+			IsConfirmationTurn: true,
+			VerifyResponse: func(t *testing.T, text string) {
+				lower := strings.ToLower(text)
+				if !strings.Contains(lower, "block") && !strings.Contains(lower, "debit") && !strings.Contains(lower, "success") && !strings.Contains(lower, "ok") {
+					t.Errorf("Failed to confirm debit card block: %q", text)
+				}
+			},
+		},
+		// Turn 15: go on (resume_playback)
+		{
+			Query:            "go on",
+			ExpectedPathType: "resume_playback",
+			VerifyResponse: func(t *testing.T, text string) {
+			},
+		},
+	}
+
+	for idx, turn := range turns {
+		turnNum := idx + 1
+		t.Logf("\n--- Stress Turn %d: User: %q ---", turnNum, turn.Query)
+
+		var reqURL string
+		var reqBody []byte
+		var err error
+
+		if turn.IsConfirmationTurn {
+			reqURL = baseURL + "/api/final"
+			reqBody, err = json.Marshal(map[string]any{
+				"session_id": sessionID,
+				"turn_id":    fmt.Sprintf("stress-turn-%d", turnNum),
+				"text":       turn.Query,
+			})
+		} else {
+			if turn.SimulateHalt {
+				partialWords := strings.Fields(turn.Query)
+				accumulated := ""
+				for pIdx, word := range partialWords {
+					accumulated += word + " "
+					pBody, _ := json.Marshal(map[string]any{
+						"session_id": sessionID,
+						"turn_id":    fmt.Sprintf("stress-turn-%d", turnNum),
+						"text":       accumulated,
+					})
+					pResp, pErr := client.Post(baseURL+"/api/partial", "application/json", bytes.NewBuffer(pBody))
+					if pErr == nil {
+						var pMap map[string]any
+						_ = json.NewDecoder(pResp.Body).Decode(&pMap)
+						pResp.Body.Close()
+						t.Logf("[Stress Partial %d] %q -> Halt: %v", pIdx+1, accumulated, pMap["halt"])
+					}
+				}
+			}
+
+			reqURL = baseURL + "/api/final"
+			reqBody, err = json.Marshal(map[string]any{
+				"session_id": sessionID,
+				"turn_id":    fmt.Sprintf("stress-turn-%d", turnNum),
+				"text":       turn.Query,
+			})
+		}
+
+		if err != nil {
+			t.Fatalf("Failed to marshal request: %v", err)
+		}
+
+		startTime := time.Now()
+		resp, err := client.Post(reqURL, "application/json", bytes.NewBuffer(reqBody))
+		if err != nil {
+			t.Fatalf("Request failed: %v", err)
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("Received non-200 HTTP status: %d", resp.StatusCode)
+		}
+
+		var finalMap map[string]any
+		reader := bufio.NewReader(resp.Body)
+		for {
+			line, rErr := reader.ReadBytes('\n')
+			if rErr != nil {
+				if rErr == io.EOF {
+					break
+				}
+				t.Fatalf("Error reading stream: %v", rErr)
+			}
+
+			var chunk map[string]any
+			if uErr := json.Unmarshal(line, &chunk); uErr == nil {
+				cType, _ := chunk["type"].(string)
+				cText, _ := chunk["text"].(string)
+				if cType == "thought" {
+					t.Logf("[Stress Thought] %s", cText)
+				} else if cType == "speech" {
+					t.Logf("[Stress Speech] %s", cText)
+				} else if cType == "final" {
+					finalMap = chunk
+				}
+			}
+		}
+		resp.Body.Close()
+		latency := time.Since(startTime)
+
+		if finalMap == nil && turn.ExpectedPathType != "resume_playback" {
+			t.Fatalf("Missing final metadata response chunk at Turn %d", turnNum)
+		}
+
+		var pathType, replyText string
+		if finalMap != nil {
+			pathType, _ = finalMap["path"].(string)
+			replyText, _ = finalMap["text"].(string)
+		} else {
+			pathType = "resume_playback"
+		}
+
+		t.Logf("[Stress Result] Path: %s, Latency: %v", pathType, latency)
+		t.Logf("[Stress Agent Reply]: %q", replyText)
+
+		if pathType != turn.ExpectedPathType {
+			t.Errorf("Stress Turn %d failed: Expected path type %q, got %q", turnNum, turn.ExpectedPathType, pathType)
+		}
+
+		turn.VerifyResponse(t, replyText)
+	}
+
+	t.Log("=== 15-TURN STRESS CONVERSATIONAL EVALUATION COMPLETED ===")
+}
+
