@@ -491,6 +491,8 @@ func (s *OrchestratorServer) handleFinal(w http.ResponseWriter, r *http.Request)
 			})
 		}
 
+		log.Printf("[DEBUG] query: %q, bypassCache: %v, cacheMatched: %v, actionScore: %f, normalThreshold: %f", req.Text, bypassCache, cacheMatched, searchRes.BestActionScore, normalThreshold)
+
 		// A. Action Intent Match
 		if cacheMatched && searchRes.BestActionScore >= normalThreshold {
 			intent, _ := searchRes.MatchedAction["intent"].(string)
