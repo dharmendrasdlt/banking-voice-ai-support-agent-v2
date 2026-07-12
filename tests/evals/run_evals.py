@@ -133,7 +133,7 @@ def run_http_turn(session_id, turn, turn_id, expected_path, user_id):
             "text": query,
             "user_id": user_id
         }
-        resp = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=15)
+        resp = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=60)
         resp.raise_for_status()
         data = resp.json()
         reply_text = data.get("text", "")
@@ -146,7 +146,7 @@ def run_http_turn(session_id, turn, turn_id, expected_path, user_id):
             "text": query,
             "user_id": user_id
         }
-        resp = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, stream=True, timeout=20)
+        resp = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, stream=True, timeout=60)
         resp.raise_for_status()
         
         for line in resp.iter_lines():
@@ -344,8 +344,9 @@ async def main_async():
             elif http_alive:
                 run_mode = "http"
             else:
-                print("⚠️ No backend services detected (port 9082/9083 down). Falling back to MOCK mode.")
-                run_mode = "mock"
+                print("❌ Error: No running services detected. Port 9082 (media-engine) and 9083 (orchestrator) are down.")
+                print("   Start your application before running evaluations, or use --mock for offline simulation.")
+                sys.exit(1)
         elif run_mode == "ws" and not ws_alive:
             print("❌ Error: WebSocket mode requested, but port 9082 is down.")
             sys.exit(1)
@@ -406,18 +407,22 @@ async def main_async():
                     latency_ms = resp_data["server_latency_ms"]
                     actual_path = resp_data["path_type"]
                 except Exception as e:
-                    print(f"    ❌ WS Turn failed: {e}. Falling back to simulated response.")
-                    run_mode = "mock"
+                    print(f"    ❌ WS Turn failed: {e}")
+                    reply_text = f"ERROR: WebSocket turn execution failed: {e}"
+                    latency_ms = 0.0
+                    actual_path = "error"
                     
-            if run_mode == "http":
+            elif run_mode == "http":
                 try:
                     resp_data = run_http_turn(session_id, turn, turn_id, expected_path, args.user_id)
                     reply_text = resp_data["reply_text"]
                     latency_ms = resp_data["server_latency_ms"]
                     actual_path = resp_data["path_type"]
                 except Exception as e:
-                    print(f"    ❌ HTTP Turn failed: {e}. Falling back to simulated response.")
-                    run_mode = "mock"
+                    print(f"    ❌ HTTP Turn failed: {e}")
+                    reply_text = f"ERROR: HTTP turn execution failed: {e}"
+                    latency_ms = 0.0
+                    actual_path = "error"
                     
             if run_mode == "mock":
                 # Simulated response logic to mimic a correct running system
