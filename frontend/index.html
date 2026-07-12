@@ -871,6 +871,8 @@
         let isSTTStarting = false;
         let isHalted = false;
         let utteranceStartTime = 0;
+        let lastSTTStartTime = 0;
+        let consecutiveQuickEnds = 0;
 
         // Global Error Handler to print browser errors on the screen terminal
         window.onerror = function(message, source, lineno, colno, error) {
@@ -1257,6 +1259,7 @@
             if (shouldBeListening && recognition && !isListening && !isSTTStarting) {
                 try {
                     isSTTStarting = true;
+                    lastSTTStartTime = Date.now();
                     recognition.start();
                 } catch (e) {
                     isSTTStarting = false;
@@ -1358,12 +1361,30 @@
                 micBtn.className = 'voice-circle-inner';
                 visualWaveform.className = 'waveform';
 
+                // Check for fast failure loops (less than 1 second active duration)
+                const activeDuration = Date.now() - lastSTTStartTime;
+                if (activeDuration < 1000) {
+                    consecutiveQuickEnds++;
+                } else {
+                    consecutiveQuickEnds = 0;
+                }
+
+                if (consecutiveQuickEnds >= 3) {
+                    console.error("[STT] Speech recognition failed to start repeatedly. Disabling voice mode.");
+                    addLog('STT', 'Speech recognition failed to start repeatedly. Disabling voice mode.', 'error');
+                    sendClientLog('error', 'stt_loop_blocked', 'Speech recognition failed to start repeatedly. Disabled auto-restart.');
+                    shouldBeListening = false;
+                    consecutiveQuickEnds = 0;
+                    return;
+                }
+
                 // Auto-restart if we are in active voice mode (continuous listening / barge-in support)
                 if (shouldBeListening && !isListening) {
                     try {
                         console.log("[STT] Auto-restarting speech recognition...");
                         sendClientLog('info', 'stt_auto_restart', 'Auto-restarting speech recognition...');
                         isSTTStarting = true;
+                        lastSTTStartTime = Date.now();
                         recognition.start();
                     } catch (e) {
                         isSTTStarting = false;
@@ -1999,6 +2020,8 @@
                 if (recognition && !isListening && !isSTTStarting) {
                     try {
                         isSTTStarting = true;
+                        lastSTTStartTime = Date.now();
+                        consecutiveQuickEnds = 0; // Reset counter on manual start attempt
                         recognition.start();
                     } catch (e) {
                         isSTTStarting = false;
