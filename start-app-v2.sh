@@ -218,7 +218,7 @@ echo -e "${GREEN}✓ Databases are healthy and ready.${NC}"
     attempt=1
     max_attempts=30
     while true; do
-        if curl -sf http://localhost:9090 >/dev/null 2>&1; then
+        if curl -k -sf https://localhost:9090 >/dev/null 2>&1; then
             break
         fi
         if [ $attempt -ge $max_attempts ]; then
@@ -229,7 +229,7 @@ echo -e "${GREEN}✓ Databases are healthy and ready.${NC}"
         attempt=$((attempt + 1))
     done
 
-    if open http://localhost:9090; then
+    if open https://localhost:9090; then
         echo -e "${GREEN}✓ UI / Control Panel started successfully.${NC}"
     else
         echo -e "${RED}Error: Failed to open UI browser window automatically.${NC}"
