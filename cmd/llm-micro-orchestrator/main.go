@@ -1124,10 +1124,13 @@ func (s *OrchestratorServer) ApplyOutputGuardrailFilter(responseText string, tru
 
 	for _, val := range responseFloats {
 		intVal := int(val)
-		if val == float64(intVal) && intVal >= 0 && intVal <= 10 {
+		if val == float64(intVal) && intVal >= 0 && intVal <= 31 {
 			continue
 		}
-		if val == 24 || val == 7 || val == 30 || val == 60 || val == 365 || val == 18 {
+		if val == float64(intVal) && intVal >= 2020 && intVal <= 2040 {
+			continue
+		}
+		if val == 365 || val == 60 || val == 90 || val == 180 {
 			continue
 		}
 
