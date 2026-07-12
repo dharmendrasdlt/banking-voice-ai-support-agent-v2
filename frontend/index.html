@@ -876,6 +876,7 @@
             if (typeof addLog === 'function') {
                 addLog('JS-ERROR', `${message} (${lineno}:${colno})`, 'error');
             }
+            sendClientLog('error', 'js_error', `${message} in ${source} at ${lineno}:${colno}`);
         };
         let currentUtteranceId = "";
         let activeAudio = null;
@@ -1303,6 +1304,7 @@
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             if (!SpeechRecognition) {
                 addLog('STT', 'Web Speech API is not supported in this browser. Voice features disabled.', 'error');
+                sendClientLog('error', 'stt_not_supported', 'Web Speech API is not supported in this browser.');
                 return;
             }
 
@@ -1339,6 +1341,7 @@
                 if (event.error === 'not-allowed' || event.error === 'audio-capture') {
                     shouldBeListening = false;
                     addLog('STT', 'Microphone access denied or hardware error. Speech deactivated.', 'error');
+                    sendClientLog('error', 'stt_mic_access_denied', 'Microphone access denied or hardware error: ' + event.error);
                 }
             };
 
@@ -1707,6 +1710,7 @@
                 utterance.onerror = (event) => {
                     if (event.error === 'not-allowed' && !userInteracted) {
                         console.log("[TTS] Native SpeechSynthesis autoplay blocked.");
+                        sendClientLog('warn', 'tts_autoplay_blocked', 'Native SpeechSynthesis autoplay blocked.');
                         isPlayingQueue = false;
                         audioQueue = [];
                         return;
