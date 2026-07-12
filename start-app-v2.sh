@@ -129,6 +129,20 @@ if [ -f "./native-kokoro/start-native-kokoro.sh" ]; then
     fi
 fi
 
+# Generate local SSL certs if they do not exist
+if [ ! -d "./certs" ]; then
+    mkdir -p ./certs
+fi
+if [ ! -f "./certs/localhost.crt" ]; then
+    echo -e "${YELLOW}Generating self-signed SSL certificate for localhost...${NC}"
+    openssl req -x509 -out certs/localhost.crt -keyout certs/localhost.key \
+      -newkey rsa:2048 -nodes -sha256 \
+      -subj '/CN=localhost' -extensions EXT -config <( \
+       printf "[dn]\nCN=localhost\n[req]\ndistinguished_name=dn\n[EXT]\nsubjectAltName=DNS:localhost\nkeyUsage=digitalSignature\nextendedKeyUsage=serverAuth") \
+       >/dev/null 2>&1
+    echo -e "${GREEN}✓ Local SSL certificate generated.${NC}"
+fi
+
 # 6. Start Docker Compose Stack with Multi-Orchestrator replicas and Nginx Load Balancer
 if [ "$FORCE_REBUILD" = false ] && [ -n "$(docker compose ps --filter "status=running" --quiet)" ]; then
     echo -e "${GREEN}✓ Services are already running on ports 9090/9083/9042, skipping restart.${NC}"
