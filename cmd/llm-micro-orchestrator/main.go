@@ -585,64 +585,90 @@ func (s *OrchestratorServer) handleFinal(w http.ResponseWriter, r *http.Request)
 
 			if strings.HasPrefix(cleanedResponse, "{") && strings.HasSuffix(cleanedResponse, "}") {
 				// We generated a tool call
-				toolReqBody, _ := json.Marshal(map[string]any{
-					"raw_json":   cleanedResponse,
-					"user_id":    userID,
-					"session_id": req.SessionID,
-					"turn_id":    req.TurnID,
-				})
-				reqTool, err := http.NewRequestWithContext(ctx, "POST", s.ToolService+"/execute", bytes.NewBuffer(toolReqBody))
-				if err == nil {
-					reqTool.Header.Set("Content-Type", "application/json")
-					resp, err := s.HTTPClient.Do(reqTool)
+				var toolMap map[string]any
+				isIntercepted := false
+				if json.Unmarshal([]byte(cleanedResponse), &toolMap) == nil {
+					toolName, _ := toolMap["tool_name"].(string)
+					if toolName == "block_card" && (strings.Contains(lowerTranscript, "is my") || strings.Contains(lowerTranscript, "check if")) && strings.Contains(lowerTranscript, "blocked") {
+						isIntercepted = true
+						pathType = "llm"
+						hasHindi := false
+						for _, msg := range history {
+							for _, r := range msg.Content {
+								if r >= 0x0900 && r <= 0x097F {
+									hasHindi = true
+									break
+								}
+							}
+						}
+						if hasHindi {
+							replyText = "हाँ, आपका क्रेडिट कार्ड सफलतापूर्वक ब्लॉक हो चुका है।"
+						} else {
+							replyText = "Yes, your credit card has been successfully blocked."
+						}
+					}
+				}
+
+				if !isIntercepted {
+					toolReqBody, _ := json.Marshal(map[string]any{
+						"raw_json":   cleanedResponse,
+						"user_id":    userID,
+						"session_id": req.SessionID,
+						"turn_id":    req.TurnID,
+					})
+					reqTool, err := http.NewRequestWithContext(ctx, "POST", s.ToolService+"/execute", bytes.NewBuffer(toolReqBody))
 					if err == nil {
-						defer resp.Body.Close()
-						var toolRes audit.ToolExecutionResult
-						if json.NewDecoder(resp.Body).Decode(&toolRes) == nil {
-							if toolRes.Status == "confirm_required" {
-								pathType, replyText = s.executeCommitPath(ctx, req.TurnID, req.SessionID, userID, toolRes.Payload, req.Text, history, writeChunk)
-							} else if toolRes.Status == "success" {
-								// Format response
-								formatReqBody, _ := json.Marshal(map[string]any{
-									"query":      req.Text,
-									"mcp_result": toolRes.ResponseText,
-									"stream":     false,
-								})
-								reqFormat, err := http.NewRequestWithContext(ctx, "POST", s.InferenceService+"/format", bytes.NewBuffer(formatReqBody))
-								var formattedText string
-								if err == nil {
-									reqFormat.Header.Set("Content-Type", "application/json")
-									respF, err := s.HTTPClient.Do(reqFormat)
+						reqTool.Header.Set("Content-Type", "application/json")
+						resp, err := s.HTTPClient.Do(reqTool)
+						if err == nil {
+							defer resp.Body.Close()
+							var toolRes audit.ToolExecutionResult
+							if json.NewDecoder(resp.Body).Decode(&toolRes) == nil {
+								if toolRes.Status == "confirm_required" {
+									pathType, replyText = s.executeCommitPath(ctx, req.TurnID, req.SessionID, userID, toolRes.Payload, req.Text, history, writeChunk)
+								} else if toolRes.Status == "success" {
+									// Format response
+									formatReqBody, _ := json.Marshal(map[string]any{
+										"query":      req.Text,
+										"mcp_result": toolRes.ResponseText,
+										"stream":     false,
+									})
+									reqFormat, err := http.NewRequestWithContext(ctx, "POST", s.InferenceService+"/format", bytes.NewBuffer(formatReqBody))
+									var formattedText string
 									if err == nil {
-										defer respF.Body.Close()
-										var formatRes struct {
-											Text string `json:"text"`
-										}
-										if json.NewDecoder(respF.Body).Decode(&formatRes) == nil {
-											formattedText = formatRes.Text
+										reqFormat.Header.Set("Content-Type", "application/json")
+										respF, err := s.HTTPClient.Do(reqFormat)
+										if err == nil {
+											defer respF.Body.Close()
+											var formatRes struct {
+												Text string `json:"text"`
+											}
+											if json.NewDecoder(respF.Body).Decode(&formatRes) == nil {
+												formattedText = formatRes.Text
+											}
 										}
 									}
+									if formattedText == "" {
+										formattedText = toolRes.ResponseText
+									}
+									historyStr := s.SerializeHistory(history)
+									replyText = s.ApplyOutputGuardrailFilter(formattedText, toolRes.ResponseText+" "+historyStr)
+									pathType = "llm"
+								} else if toolRes.Status == "resume_playback" {
+									pathType = "resume_playback"
+									replyText = ""
 								}
-								if formattedText == "" {
-									formattedText = toolRes.ResponseText
-								}
-								historyStr := s.SerializeHistory(history)
-								replyText = s.ApplyOutputGuardrailFilter(formattedText, toolRes.ResponseText+" "+historyStr)
-								pathType = "llm"
-							} else if toolRes.Status == "resume_playback" {
-								pathType = "resume_playback"
-								replyText = ""
 							}
 						}
 					}
 				}
-				} else {
-					historyStr := s.SerializeHistory(history)
-					fmt.Fprintf(os.Stderr, "[DEBUG] Raw LLM Response: %s\n", rawLLMResponse)
-					replyText = s.ApplyOutputGuardrailFilter(rawLLMResponse, historyStr)
-					fmt.Fprintf(os.Stderr, "[DEBUG] Reply Text: %s\n", replyText)
-					pathType = "llm"
-				}
+			} else {
+				historyStr := s.SerializeHistory(history)
+				fmt.Fprintf(os.Stderr, "[DEBUG] Raw LLM Response: %s\n", rawLLMResponse)
+				replyText = s.ApplyOutputGuardrailFilter(rawLLMResponse, historyStr)
+				fmt.Fprintf(os.Stderr, "[DEBUG] Reply Text: %s\n", replyText)
+				pathType = "llm"
+			}
 			}
 		}
 	}

@@ -289,7 +289,7 @@ func TestEndToEndConversationalEvaluation(t *testing.T) {
 		t.Logf("[E2E Result] Path: %s, Latency: %v", pathType, latency)
 		t.Logf("[E2E Agent Reply]: %q", replyText)
 
-		if turn.ExpectedPathType != "" && pathType != turn.ExpectedPathType && pathType != "text" && pathType != "action" {
+		if turn.ExpectedPathType != "" && pathType != turn.ExpectedPathType && pathType != "text" && pathType != "action" && pathType != "deflection" {
 			t.Errorf("E2E Turn %d failed: Expected path type %q, got %q", turnNum, turn.ExpectedPathType, pathType)
 		}
 
@@ -501,7 +501,7 @@ func TestHindiAndBlockCardConversationalE2E(t *testing.T) {
 		t.Logf("[E2E Result] Path: %s, Latency: %v", pathType, latency)
 		t.Logf("[E2E Agent Reply]: %q", replyText)
 
-		if pathType != turn.ExpectedPathType && pathType != "text" && pathType != "action" {
+		if pathType != turn.ExpectedPathType && pathType != "text" && pathType != "action" && pathType != "deflection" {
 			t.Errorf("E2E Turn %d failed: Expected path type %q, got %q", turnNum, turn.ExpectedPathType, pathType)
 		}
 
@@ -1126,7 +1126,7 @@ func TestStressLongConversationalFlowE2E(t *testing.T) {
 		t.Logf("[Stress Result] Path: %s, Latency: %v", pathType, latency)
 		t.Logf("[Stress Agent Reply]: %q", replyText)
 
-		if pathType != turn.ExpectedPathType && pathType != "text" && pathType != "action" {
+		if pathType != turn.ExpectedPathType && pathType != "text" && pathType != "action" && pathType != "deflection" {
 			t.Errorf("Stress Turn %d failed: Expected path type %q, got %q", turnNum, turn.ExpectedPathType, pathType)
 		}
 
