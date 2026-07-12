@@ -114,7 +114,7 @@ func main() {
 	mux.HandleFunc("/ws", srv.handleWebSocket)
 
 	// Healthcheck endpoint
-	mux.HandleFunc("/healthz", srv.handleHealthz)
+	mux.Handle("/healthz", otelhttp.NewHandler(http.HandlerFunc(srv.handleHealthz), "healthz"))
 
 	server := &http.Server{
 		Addr:    ":9082",

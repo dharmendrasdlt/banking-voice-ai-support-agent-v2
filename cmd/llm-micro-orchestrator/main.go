@@ -133,7 +133,7 @@ func main() {
 	mux.Handle("/api/confirmation", otelhttp.NewHandler(http.HandlerFunc(srv.handleConfirmation), "confirmation"))
 	mux.Handle("/api/bank-data", otelhttp.NewHandler(http.HandlerFunc(srv.handleBankData), "bank-data"))
 	mux.Handle("/api/config", otelhttp.NewHandler(http.HandlerFunc(srv.handleConfig), "config"))
-	mux.HandleFunc("/healthz", srv.handleHealthz)
+	mux.Handle("/healthz", otelhttp.NewHandler(http.HandlerFunc(srv.handleHealthz), "healthz"))
 
 	server := &http.Server{
 		Addr:    ":9083",
@@ -1166,10 +1166,6 @@ func getEnv(key, fallback string) string {
 
 func withLogging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/healthz" {
-			next.ServeHTTP(w, r)
-			return
-		}
 		start := time.Now()
 		next.ServeHTTP(w, r)
 		duration := time.Since(start)

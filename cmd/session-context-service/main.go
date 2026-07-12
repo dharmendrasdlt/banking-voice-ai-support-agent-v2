@@ -88,7 +88,7 @@ func main() {
 	mux.Handle("/load", otelhttp.NewHandler(http.HandlerFunc(srv.handleLoad), "context.load"))
 	mux.Handle("/save", otelhttp.NewHandler(http.HandlerFunc(srv.handleSave), "context.save"))
 	mux.Handle("/prune", otelhttp.NewHandler(http.HandlerFunc(srv.handlePrune), "context.prune"))
-	mux.HandleFunc("/healthz", srv.handleHealthz)
+	mux.Handle("/healthz", otelhttp.NewHandler(http.HandlerFunc(srv.handleHealthz), "healthz"))
 
 	port := getEnv("PORT", "9087")
 	server := &http.Server{
@@ -266,10 +266,6 @@ func getEnv(key, fallback string) string {
 
 func withLogging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/healthz" {
-			next.ServeHTTP(w, r)
-			return
-		}
 		start := time.Now()
 		next.ServeHTTP(w, r)
 		duration := time.Since(start)

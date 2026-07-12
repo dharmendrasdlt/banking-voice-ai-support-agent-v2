@@ -66,7 +66,7 @@ func main() {
 	mux.Handle("/execute", otelhttp.NewHandler(http.HandlerFunc(srv.handleExecute), "execute"))
 	mux.Handle("/confirm", otelhttp.NewHandler(http.HandlerFunc(srv.handleConfirm), "confirm"))
 	mux.Handle("/bank-data", otelhttp.NewHandler(http.HandlerFunc(srv.handleBankData), "bank-data"))
-	mux.HandleFunc("/healthz", srv.handleHealthz)
+	mux.Handle("/healthz", otelhttp.NewHandler(http.HandlerFunc(srv.handleHealthz), "healthz"))
 
 	server := &http.Server{
 		Addr:    ":9088",

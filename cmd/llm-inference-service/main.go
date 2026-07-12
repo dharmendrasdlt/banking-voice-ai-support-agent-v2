@@ -46,7 +46,7 @@ func main() {
 	mux.Handle("/embedding", otelhttp.NewHandler(http.HandlerFunc(srv.handleEmbedding), "embedding"))
 	mux.Handle("/chat", otelhttp.NewHandler(http.HandlerFunc(srv.handleChat), "chat"))
 	mux.Handle("/format", otelhttp.NewHandler(http.HandlerFunc(srv.handleFormat), "format"))
-	mux.HandleFunc("/healthz", srv.handleHealthz)
+	mux.Handle("/healthz", otelhttp.NewHandler(http.HandlerFunc(srv.handleHealthz), "healthz"))
 
 	server := &http.Server{
 		Addr:    ":9091",

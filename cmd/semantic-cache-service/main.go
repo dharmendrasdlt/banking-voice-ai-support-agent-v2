@@ -57,7 +57,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.Handle("/search", otelhttp.NewHandler(http.HandlerFunc(srv.handleSearch), "search"))
-	mux.HandleFunc("/healthz", srv.handleHealthz)
+	mux.Handle("/healthz", otelhttp.NewHandler(http.HandlerFunc(srv.handleHealthz), "healthz"))
 
 	server := &http.Server{
 		Addr:    ":9089",
