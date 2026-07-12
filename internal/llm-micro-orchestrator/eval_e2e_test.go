@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"crypto/tls"
 	"banking-voice-ai-agent/internal/db"
 
 	"github.com/gorilla/websocket"
@@ -24,7 +25,7 @@ func TestEndToEndConversationalEvaluation(t *testing.T) {
 	// Target the NGINX load balancer exposed on port 9090 on the host
 	baseURL := os.Getenv("E2E_BASE_URL")
 	if baseURL == "" {
-		baseURL = "http://localhost:9090/orchestrator"
+		baseURL = "https://localhost:9090/orchestrator"
 	}
 
 	sessionID := fmt.Sprintf("e2e-sess-%d", time.Now().Unix())
@@ -45,6 +46,9 @@ func TestEndToEndConversationalEvaluation(t *testing.T) {
 
 	client := &http.Client{
 		Timeout: 180 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
 	}
 
 	turns := []struct {
@@ -300,7 +304,7 @@ func TestHindiAndBlockCardConversationalE2E(t *testing.T) {
 	t.Parallel()
 	baseURL := os.Getenv("E2E_BASE_URL")
 	if baseURL == "" {
-		baseURL = "http://localhost:9090/orchestrator"
+		baseURL = "https://localhost:9090/orchestrator"
 	}
 
 	sessionID := fmt.Sprintf("e2e-hindi-sess-%d", time.Now().Unix())
@@ -321,6 +325,9 @@ func TestHindiAndBlockCardConversationalE2E(t *testing.T) {
 
 	client := &http.Client{
 		Timeout: 180 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
 	}
 
 	turns := []struct {
@@ -525,7 +532,7 @@ func TestFullPipelineConversationalE2E(t *testing.T) {
 
 	wsURL := os.Getenv("E2E_WS_URL")
 	if wsURL == "" {
-		wsURL = "ws://localhost:9090/ws?user_id=" + userID
+		wsURL = "wss://localhost:9090/ws?user_id=" + userID
 	} else {
 		if !strings.Contains(wsURL, "user_id=") {
 			if strings.Contains(wsURL, "?") {
@@ -539,7 +546,9 @@ func TestFullPipelineConversationalE2E(t *testing.T) {
 	t.Logf("=== STARTING FULL PIPELINE WEBSOCKET E2E CONVERSATIONAL EVALUATION (URL: %s, User: %s) ===", wsURL, userID)
 
 	// Dial WebSocket connection
-	dialer := websocket.DefaultDialer
+	dialer := &websocket.Dialer{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
 	ws, resp, err := dialer.Dial(wsURL, nil)
 	if err != nil {
 		t.Fatalf("Failed to establish WebSocket connection to %s: %v", wsURL, err)
@@ -812,7 +821,7 @@ func TestStressLongConversationalFlowE2E(t *testing.T) {
 	t.Parallel()
 	baseURL := os.Getenv("E2E_BASE_URL")
 	if baseURL == "" {
-		baseURL = "http://localhost:9090/orchestrator"
+		baseURL = "https://localhost:9090/orchestrator"
 	}
 
 	sessionID := fmt.Sprintf("e2e-stress-sess-%d", time.Now().Unix())
@@ -833,6 +842,9 @@ func TestStressLongConversationalFlowE2E(t *testing.T) {
 
 	client := &http.Client{
 		Timeout: 180 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
 	}
 
 	turns := []struct {
