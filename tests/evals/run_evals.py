@@ -545,8 +545,18 @@ async def main_async():
         p90_lat = all_latencies[int(n * 0.90)]
         p99_lat = all_latencies[int(n * 0.99)]
 
+    # Determine the overall evaluator type by checking the results
+    judge_types = set()
+    for case in results:
+        for turn in case.get("turns", []):
+            if "judge_type" in turn:
+                judge_types.add(turn["judge_type"])
+    
+    evaluator_type = ", ".join(sorted(list(judge_types))) if judge_types else "Unknown"
+
     output_data = {
         "total_score": total_score,
+        "evaluator_type": evaluator_type,
         "dataset": args.dataset,
         "run_mode": run_mode,
         "cases_evaluated": total_cases,

@@ -151,14 +151,18 @@ if (( $(echo "$SCORE >= 95.0" | bc -l) )); then
 else
   score_color="${RED}"
 fi
-echo -e "OVERALL SCORE: ${score_color}${BOLD}${SCORE}%${NC}  (Required Gating Threshold: 95.0%)"
+
+EVALUATOR_TYPE=$(jq -r '.evaluator_type // "Unknown"' eval_results.json)
+
+echo -e "OVERALL SCORE:  ${score_color}${BOLD}${SCORE}%${NC}  (Required Gating Threshold: 95.0%)"
+echo -e "EVALUATOR TYPE: ${CYAN}${BOLD}${EVALUATOR_TYPE}${NC}"
 echo -e "${BLUE}=========================================================================================${NC}"
 
 # Gating comparison and exit code
 if (( $(echo "$SCORE < 95.0" | bc -l) )); then
-  echo -e "${RED}${BOLD}FAIL: Evaluation score ($SCORE%) falls below the 95.0% threshold!${NC}"
+  echo -e "${RED}${BOLD}FAIL: Evaluation score ($SCORE%) falls below the 95.0% threshold! (Evaluator: ${EVALUATOR_TYPE})${NC}"
   exit 1
 else
-  echo -e "${GREEN}${BOLD}PASS: Agent is healthy and ready for deployment!${NC}"
+  echo -e "${GREEN}${BOLD}PASS: Agent is healthy and ready for deployment! (Evaluator: ${EVALUATOR_TYPE})${NC}"
   exit 0
 fi
