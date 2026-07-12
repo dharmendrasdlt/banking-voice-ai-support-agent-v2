@@ -640,25 +640,24 @@ func (s *OrchestratorServer) handleFinal(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
+	// 1. Call context-service to append turns (synchronously)
+	contextAppendBody, _ := json.Marshal(map[string]any{
+		"session_id":        req.SessionID,
+		"user_message":      req.Text,
+		"assistant_message": replyText,
+	})
+	reqCtx, err := http.NewRequestWithContext(ctx, "POST", s.ContextService+"/save", bytes.NewBuffer(contextAppendBody))
+	if err == nil {
+		reqCtx.Header.Set("Content-Type", "application/json")
+		resp, err := s.HTTPClient.Do(reqCtx)
+		if err == nil {
+			resp.Body.Close()
+		}
+	}
+
 	// Update conversation context history and log to streams asynchronously
 	go func() {
 		histCtx := telemetry.WithTraceContext(context.Background(), req.SessionID, req.TurnID)
-
-		// 1. Call context-service to append turns
-		contextAppendBody, _ := json.Marshal(map[string]any{
-			"session_id":        req.SessionID,
-			"user_message":      req.Text,
-			"assistant_message": replyText,
-		})
-		reqCtx, err := http.NewRequestWithContext(histCtx, "POST", s.ContextService+"/save", bytes.NewBuffer(contextAppendBody))
-		if err == nil {
-			reqCtx.Header.Set("Content-Type", "application/json")
-			resp, err := s.HTTPClient.Do(reqCtx)
-			if err == nil {
-				resp.Body.Close()
-			}
-		}
-
 		// 2. Publish completion events to conversation_history_stream
 		s.LogConversationTurn(histCtx, userID, req.SessionID, "user", req.Text, "", "", "")
 		s.LogConversationTurn(histCtx, userID, req.SessionID, "assistant", replyText, pathType, "", "")
@@ -750,25 +749,24 @@ func (s *OrchestratorServer) handleConfirmation(w http.ResponseWriter, r *http.R
 		replyText = "Transaction confirmation failed."
 	}
 
+	// Call context-service to append turns (synchronously)
+	contextAppendBody, _ := json.Marshal(map[string]any{
+		"session_id":        req.SessionID,
+		"user_message":      req.Text,
+		"assistant_message": replyText,
+	})
+	reqCtx, err := http.NewRequestWithContext(ctx, "POST", s.ContextService+"/save", bytes.NewBuffer(contextAppendBody))
+	if err == nil {
+		reqCtx.Header.Set("Content-Type", "application/json")
+		resp, err := s.HTTPClient.Do(reqCtx)
+		if err == nil {
+			resp.Body.Close()
+		}
+	}
+
 	// Log confirmation outcomes asynchronously
 	go func() {
 		histCtx := telemetry.WithTraceContext(context.Background(), req.SessionID, req.TurnID)
-
-		// Call context-service to append turns
-		contextAppendBody, _ := json.Marshal(map[string]any{
-			"session_id":        req.SessionID,
-			"user_message":      req.Text,
-			"assistant_message": replyText,
-		})
-		reqCtx, err := http.NewRequestWithContext(histCtx, "POST", s.ContextService+"/save", bytes.NewBuffer(contextAppendBody))
-		if err == nil {
-			reqCtx.Header.Set("Content-Type", "application/json")
-			resp, err := s.HTTPClient.Do(reqCtx)
-			if err == nil {
-				resp.Body.Close()
-			}
-		}
-
 		s.LogConversationTurn(histCtx, userID, req.SessionID, "user", req.Text, "confirmation", "", "")
 		s.LogConversationTurn(histCtx, userID, req.SessionID, "assistant", replyText, "confirmation", "", "")
 	}()
