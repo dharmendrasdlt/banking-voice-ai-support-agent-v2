@@ -868,6 +868,7 @@
         let socket = null;
         let recognition = null;
         let isListening = false;
+        let isSTTStarting = false;
         let isHalted = false;
         let utteranceStartTime = 0;
 
@@ -1253,10 +1254,12 @@
         let ttsEndTime = 0;
 
         function resumeSpeechIfNeeded() {
-            if (shouldBeListening && recognition && !isListening) {
+            if (shouldBeListening && recognition && !isListening && !isSTTStarting) {
                 try {
+                    isSTTStarting = true;
                     recognition.start();
                 } catch (e) {
+                    isSTTStarting = false;
                     console.warn("[STT] Failed to auto-resume recognition:", e.message);
                     if (e.message && e.message.toLowerCase().includes("already started")) {
                         // If browser is already listening, synchronize our state variables
@@ -1315,6 +1318,7 @@
 
             recognition.onstart = () => {
                 isListening = true;
+                isSTTStarting = false;
                 wsIndicator.className = 'status-indicator listening';
                 micCircleOuter.className = 'voice-circle-outer listening';
                 micBtn.className = 'voice-circle-inner listening';
@@ -1334,6 +1338,7 @@
             };
 
             recognition.onerror = (event) => {
+                isSTTStarting = false;
                 console.error("[STT] Speech recognition error:", event.error);
                 sendClientLog('error', 'stt_error', 'Web Speech API error: ' + event.error);
                 
@@ -1347,18 +1352,21 @@
 
             recognition.onend = () => {
                 isListening = false;
+                isSTTStarting = false;
                 wsIndicator.className = 'status-indicator connected';
                 micCircleOuter.className = 'voice-circle-outer';
                 micBtn.className = 'voice-circle-inner';
                 visualWaveform.className = 'waveform';
 
                 // Auto-restart if we are in active voice mode (continuous listening / barge-in support)
-                if (shouldBeListening) {
+                if (shouldBeListening && !isListening) {
                     try {
                         console.log("[STT] Auto-restarting speech recognition...");
                         sendClientLog('info', 'stt_auto_restart', 'Auto-restarting speech recognition...');
+                        isSTTStarting = true;
                         recognition.start();
                     } catch (e) {
+                        isSTTStarting = false;
                         console.warn("[STT] Auto-restart on end failed:", e);
                         sendClientLog('warn', 'stt_auto_restart_failed', 'Auto-restart on end failed: ' + e.message);
                     }
@@ -1748,6 +1756,12 @@
                     processAudioQueue();
                 });
                 activeAudio.play().catch(err => {
+                    if (err.name === 'AbortError') {
+                        console.log("[TTS] Google chunk playback aborted (user interruption).");
+                        isPlayingQueue = false;
+                        activeAudio = null;
+                        return;
+                    }
                     if (err.name === 'NotAllowedError' && !userInteracted) {
                         console.log("[TTS] Google fallback autoplay blocked.");
                         isPlayingQueue = false;
@@ -1866,6 +1880,12 @@
                         processAudioQueue();
                     });
                     activeAudio.play().catch(err => {
+                        if (err.name === 'AbortError') {
+                            console.log("[TTS] Kokoro chunk playback aborted (user interruption).");
+                            isPlayingQueue = false;
+                            activeAudio = null;
+                            return;
+                        }
                         if (err.name === 'NotAllowedError' && !userInteracted) {
                             console.log("[TTS] Kokoro autoplay blocked. Storing greeting until user click.");
                             sendClientLog('warn', 'autoplay_blocked', 'Browser blocked audio autoplay. Storing greeting.');
@@ -1976,7 +1996,15 @@
                 currentlyPlayingItem = null;
                 isTTSPlaying = false;
 
-                if (recognition) recognition.start();
+                if (recognition && !isListening && !isSTTStarting) {
+                    try {
+                        isSTTStarting = true;
+                        recognition.start();
+                    } catch (e) {
+                        isSTTStarting = false;
+                        console.warn("[STT] Start from click failed:", e.message);
+                    }
+                }
             }
         });
 
@@ -2007,7 +2035,7 @@
 
         // STT Watchdog: checks every 2 seconds to recover from silent Chrome STT drops
         setInterval(() => {
-            if (shouldBeListening && !isListening && !isHalted) {
+            if (shouldBeListening && !isListening && !isSTTStarting && !isHalted) {
                 console.log("[STT Watchdog] Detected microphone silent stop. Resurrecting...");
                 resumeSpeechIfNeeded();
             }
