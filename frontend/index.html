@@ -1353,9 +1353,11 @@
                 if (shouldBeListening) {
                     try {
                         console.log("[STT] Auto-restarting speech recognition...");
+                        sendClientLog('info', 'stt_auto_restart', 'Auto-restarting speech recognition...');
                         recognition.start();
                     } catch (e) {
                         console.warn("[STT] Auto-restart on end failed:", e);
+                        sendClientLog('warn', 'stt_auto_restart_failed', 'Auto-restart on end failed: ' + e.message);
                     }
                 }
             };
@@ -1936,10 +1938,12 @@
             if (isListening) {
                 shouldBeListening = false;
                 isTTSPlaying = false;
+                sendClientLog('info', 'mic_stop', 'User deactivated microphone.');
                 recognition.stop();
             } else {
                 shouldBeListening = true;
                 isTTSPlaying = false; // allow mic to run even if TTS was mid-play (intentional barge-in)
+                sendClientLog('info', 'mic_start', 'User activated microphone.');
                 if (!recognition) setupSpeechRecognition();
 
                 // Stop active agent playback on user tap
@@ -1953,6 +1957,7 @@
                         suspendedQueue.push(...audioQueue);
                     }
                     console.log("[Mic Tap] Stopped agent speech and stashed queue.");
+                    sendClientLog('info', 'mic_tap_barge_in', 'Stopped agent speech and stashed queue on user mic tap.');
                 }
 
                 if (activeAudio) {
