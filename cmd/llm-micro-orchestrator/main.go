@@ -1188,6 +1188,10 @@ func (s *OrchestratorServer) ApplyOutputGuardrailFilter(responseText string, tru
 		}
 
 		if !trustedFloats[val] {
+			fmt.Fprintf(os.Stderr, "[GUARDRAIL TRIP DETAILED DEBUG] Query/Response: %q\n", responseText)
+			fmt.Fprintf(os.Stderr, "[GUARDRAIL TRIP DETAILED DEBUG] Trusted data: %q\n", trustedSourceData)
+			fmt.Fprintf(os.Stderr, "[GUARDRAIL TRIP DETAILED DEBUG] Trusted floats: %+v\n", trustedFloats)
+			fmt.Fprintf(os.Stderr, "[GUARDRAIL TRIP DETAILED DEBUG] Failed float: %f\n", val)
 			log.Printf("[GUARDRAIL FILTER TRIP] Suppressed response due to unverified numerical value: %f", val)
 			return "I'm sorry, I don't have that specific information right now. Let me connect you with a representative who can look that up for you."
 		}
