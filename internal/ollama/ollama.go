@@ -10,6 +10,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -49,24 +50,31 @@ type EmbedResponse struct {
 	Embedding []float64 `json:"embedding"`
 }
 
+type EmbeddingReq struct {
+	Text string `json:"text"`
+}
+
+type EmbeddingResp struct {
+	Embedding []float64 `json:"embedding"`
+}
+
+// NewClient creates a new Client.
 func NewClient(baseURL, chatModel, embedModel string) *Client {
-	if baseURL == "" {
-		baseURL = "http://localhost:11434"
-	}
 	return &Client{
 		BaseURL:    baseURL,
 		ChatModel:  chatModel,
 		EmbedModel: embedModel,
-		HTTPClient: &http.Client{
-			Timeout: 0, // No global timeout, rely on Context timeout/cancellation
-		},
+		HTTPClient: &http.Client{},
 	}
 }
 
-// GetEmbedding gets the text embedding vector from Ollama
+// GetEmbedding returns the embedding for the given text.
 func (c *Client) GetEmbedding(ctx context.Context, text string) ([]float64, error) {
-	ctx, span := telemetry.Step(ctx, "ollama.embedding", attribute.String("ollama.model", c.EmbedModel))
+	ctx, span := telemetry.Step(ctx, "ollama.embeddings",
+		attribute.String("ollama.model", c.EmbedModel),
+	)
 	defer span.End()
+
 	reqBody, err := json.Marshal(EmbedRequest{
 		Model:  c.EmbedModel,
 		Prompt: text,
@@ -103,18 +111,26 @@ func (c *Client) GetEmbedding(ctx context.Context, text string) ([]float64, erro
 // Chat calls chat endpoint. If stream is true, returns a channel of strings and an error.
 // If stream is false, it returns the single completion string.
 // Context cancellation will abort the Ollama request mid-flight.
+// Now handles thinking option conditionally.
 func (c *Client) Chat(ctx context.Context, messages []ChatMessage, stream bool, streamChan chan<- ChatResponse) (string, error) {
 	ctx, span := telemetry.Step(ctx, "ollama.chat",
 		attribute.String("ollama.model", c.ChatModel),
 		attribute.Int("ollama.num_messages", len(messages)),
 	)
 	defer span.End()
-	thinkVal := true
+
+	var thinkVal *bool = nil
+	modelLower := strings.ToLower(c.ChatModel)
+	if strings.Contains(modelLower, "r1") || strings.Contains(modelLower, "deepseek") {
+		val := true
+		thinkVal = &val
+	}
+
 	reqBody, err := json.Marshal(ChatRequest{
 		Model:    c.ChatModel,
 		Messages: messages,
 		Stream:   stream,
-		Think:    &thinkVal,
+		Think:    thinkVal,
 		Options: map[string]any{
 			"num_predict": 1024, // Limit generation length for speed (expanded for thinking models)
 			"temperature": 0.0,  // Low temp for reliable banking deflections
