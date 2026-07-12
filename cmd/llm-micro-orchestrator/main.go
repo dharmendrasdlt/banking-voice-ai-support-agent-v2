@@ -629,7 +629,9 @@ func (s *OrchestratorServer) handleFinal(w http.ResponseWriter, r *http.Request)
 				}
 				} else {
 					historyStr := s.SerializeHistory(history)
+					log.Printf("[DEBUG] Raw LLM Response: %s", rawLLMResponse)
 					replyText = s.ApplyOutputGuardrailFilter(rawLLMResponse, historyStr)
+					log.Printf("[DEBUG] Reply Text: %s", replyText)
 					pathType = "llm"
 				}
 			}
