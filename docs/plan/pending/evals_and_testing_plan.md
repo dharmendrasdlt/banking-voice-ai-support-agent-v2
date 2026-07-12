@@ -8,7 +8,7 @@ This plan details the implementation of an automated evaluation and CI regressio
 - **Zero Hallucination Tolerance**: Keep account balances and interest rates 100% verified against DB snapshots.
 - **Safety / Compliance Gating**: Prevent any monetary transactions or card block executions without explicit user confirmation.
 - **Latency SLO Verification**: Ensure Time-To-First-Audio (TTFA) stays under `<300ms` for 99% of requests.
-- **Automated CI Regression Blocking**: Run evaluations on every pull request and automatically block merges if score threshold falls below `95%`.
+- **Local CLI Evaluation Gate**: Run evaluations locally via shell script and block staging pushes if the score threshold falls below `95%`.
 
 ---
 
@@ -16,19 +16,17 @@ This plan details the implementation of an automated evaluation and CI regressio
 
 ```mermaid
 graph TD
-    PR[Pull Request Commit] -->|GitHub Actions| CI[1. CI Test Runner]
-    CI -->|Compose Up| Stack[2. Decoupled Microservice Stack]
-    CI -->|Executes| Harness[3. Evals Python/Go Harness]
+    DEV[Developer Terminal] -->|runs run-evals.sh| Harness[1. Local Evals Python/Go Harness]
     
     Harness -->|Reads| Dataset[(Golden Dataset JSON)]
-    Harness -->|Sends Text WS| Stack
+    Harness -->|Sends Text WS| Stack[2. Decoupled Microservice Stack]
     Stack -->|Returns Transcripts| Harness
     
-    Harness -->|Pushes Response & Criteria| Judge[4. LLM-as-a-Judge API]
+    Harness -->|Pushes Response & Criteria| Judge[3. LLM-as-a-Judge API]
     Judge -->|Returns Grades & Scores| Harness
     
-    Harness -->|Generates| Report[5. Markdown Report / PR Comment]
-    Harness -->|Score < 95%| Fail[Block Merge]
+    Harness -->|Outputs| Report[4. Terminal Dashboard & JSON Report]
+    Harness -->|Score < 95%| Fail[Exit Code 1 / Block Commit]
 ```
 
 ---
@@ -105,44 +103,38 @@ Inside the test harness, we will capture timestamps at the millisecond level:
 
 The harness will calculate $\text{TTFA} = T_3 - T_0$ and report the $p50$, $p90$, and $p99$ metrics. If $p99 > 300\text{ms}$, it triggers an alert.
 
-### Phase 4: Configure GitHub Actions Workflow
-We will add `.github/workflows/evals.yml` to run the test suite on every pull request:
+### Phase 4: Create a Local CLI Eval Runner Script
+We will add `run-evals.sh` in the project root to run the test suite locally and fail the build if the score is low:
 
-```yaml
-name: Continuous Conversational Evaluation
-on: [pull_request]
+```bash
+#!/bin/bash
+# ==============================================================================
+#  Voice AI Support Agent - Local Conversational Evaluation Runner
+# ==============================================================================
 
-jobs:
-  evals:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v3
+echo "Starting local evaluation suite..."
 
-      - name: Spin up Decoupled Stack
-        run: docker-compose up -d --build
+# Ensure Docker environment is up
+if ! docker ps | grep voice_agent_redis_v2 &> /dev/null; then
+  echo "Error: Application stack is not running. Please run ./start-app-v2.sh first."
+  exit 1
+fi
 
-      - name: Run Evals Suite
-        run: python tests/evals/run_evals.py --dataset tests/data/golden_dataset.json
+# Run python evaluations
+python3 tests/evals/run_evals.py --dataset tests/data/golden_dataset.json
 
-      - name: Check Score Threshold
-        run: |
-          SCORE=$(cat eval_results.json | jq '.total_score')
-          if (( $(echo "$SCORE < 95.0" | bc -l) )); then
-             echo "Evals failed: Score is $SCORE%"
-             exit 1
-          fi
+# Parse output score
+SCORE=$(jq '.total_score' eval_results.json)
+echo "----------------------------------------"
+echo "Evaluation Score: $SCORE%"
+echo "----------------------------------------"
 
-      - name: Post PR Summary Comment
-        uses: actions/github-script@v6
-        with:
-          script: |
-            const fs = require('fs');
-            const mdReport = fs.readFileSync('eval_results.md', 'utf8');
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: mdReport
-            })
+# Gating comparison
+if (( $(echo "$SCORE < 95.0" | bc -l) )); then
+  echo -e "\033[1;31mFAIL: Evaluation score ($SCORE%) falls below the 95.0% threshold!\033[0m"
+  exit 1
+else
+  echo -e "\033[1;32mPASS: Agent is healthy and ready for deployment!\033[0m"
+  exit 0
+fi
 ```
