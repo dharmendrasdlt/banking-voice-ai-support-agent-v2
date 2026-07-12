@@ -201,7 +201,20 @@ echo -e "${GREEN}✓ Databases are healthy and ready.${NC}"
 # Open browser to control panel automatically with progress notifications
 (
     echo -e "${YELLOW}Starting UI / Control Panel...${NC}"
-    sleep 2
+    attempt=1
+    max_attempts=30
+    while true; do
+        if curl -sf http://localhost:9090 >/dev/null 2>&1; then
+            break
+        fi
+        if [ $attempt -ge $max_attempts ]; then
+            echo -e "${RED}Error: UI Gateway on port 9090 is unresponsive after 30 seconds.${NC}"
+            exit 1
+        fi
+        sleep 1
+        attempt=$((attempt + 1))
+    done
+
     if open http://localhost:9090; then
         echo -e "${GREEN}✓ UI / Control Panel started successfully.${NC}"
     else
@@ -214,5 +227,5 @@ echo -e "${YELLOW}Press Ctrl+C to stop trailing logs (the containers will keep r
 echo -e "${BLUE}------------------------------------------------------------${NC}"
 
 # Stream logs from all 8 decoupled application services and the load balancer
-docker compose logs -f lb media-engine llm-micro-orchestrator session-context-service semantic-cache-service llm-inference-service tool-execution-service conversation-history-consumer audit-log-consumer
+# docker compose logs -f lb media-engine llm-micro-orchestrator session-context-service semantic-cache-service llm-inference-service tool-execution-service conversation-history-consumer audit-log-consumer
 
