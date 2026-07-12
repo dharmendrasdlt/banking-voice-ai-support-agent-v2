@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -581,20 +580,20 @@ func (s *OrchestratorServer) handleFinal(w http.ResponseWriter, r *http.Request)
 					resp, err := s.HTTPClient.Do(reqChat)
 					if err == nil {
 						defer resp.Body.Close()
-						reader := bufio.NewReader(resp.Body)
+						decoder := json.NewDecoder(resp.Body)
 						for {
-							line, err := reader.ReadBytes('\n')
-							if err != nil {
+							var chunk struct {
+								Type string `json:"type"`
+								Text string `json:"text"`
+							}
+							if err := decoder.Decode(&chunk); err != nil {
 								break
 							}
-							var chunk struct {
-								Message struct {
-									Content string `json:"content"`
-								} `json:"message"`
-							}
-							if json.Unmarshal(line, &chunk) == nil {
-								fullResponse.WriteString(chunk.Message.Content)
-								writeChunk("speech", chunk.Message.Content)
+							if chunk.Type == "thought" {
+								writeChunk("thought", chunk.Text)
+							} else if chunk.Type == "speech" {
+								writeChunk("speech", chunk.Text)
+								fullResponse.WriteString(chunk.Text)
 							}
 						}
 					}
