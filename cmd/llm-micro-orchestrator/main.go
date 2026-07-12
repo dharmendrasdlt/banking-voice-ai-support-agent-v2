@@ -416,6 +416,13 @@ func (s *OrchestratorServer) handleFinal(w http.ResponseWriter, r *http.Request)
 		if lowerQuery == "resume" || lowerQuery == "go on" || lowerQuery == "continue" {
 			pathType = "resume_playback"
 			replyText = ""
+		} else if strings.Contains(lowerQuery, "cvv") || strings.Contains(lowerQuery, "pin") || strings.Contains(lowerQuery, "password") || strings.Contains(lowerQuery, "otp") {
+			pathType = "llm"
+			if isHindiText(req.Text) {
+				replyText = "सुरक्षा कारणों से, मैं इस लाइन पर पिन, सीवीवी या पासवर्ड का खुलासा नहीं कर सकता।"
+			} else {
+				replyText = "For security reasons, I cannot disclose or discuss PINs, CVVs, or passwords over this line. Let me know if you want to connect with a representative."
+			}
 		} else {
 			// 2. Standard path (context load -> cache -> LLM fallback)
 			var history []ollama.ChatMessage
