@@ -67,6 +67,7 @@ func main() {
 	mux.Handle("/confirm", otelhttp.NewHandler(http.HandlerFunc(srv.handleConfirm), "confirm"))
 	mux.Handle("/bank-data", otelhttp.NewHandler(http.HandlerFunc(srv.handleBankData), "bank-data"))
 	mux.Handle("/healthz", otelhttp.NewHandler(http.HandlerFunc(srv.handleHealthz), "healthz"))
+	mux.Handle("/reset", otelhttp.NewHandler(http.HandlerFunc(srv.handleReset), "reset"))
 
 	server := &http.Server{
 		Addr:    ":9088",
@@ -358,4 +359,19 @@ func isHindiText(text string) bool {
 		}
 	}
 	return false
+}
+
+func (s *ToolExecutionServer) handleReset(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	ctx := r.Context()
+	err := s.Mongo.ResetAndSeed(ctx)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to reset database: %v", err), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("OK"))
 }

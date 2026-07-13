@@ -98,6 +98,10 @@ if [ "$RUN_E2E" = "true" ]; then
   echo -e "${GREEN}✓ Go E2E Integration tests passed.${NC}"
 fi
 
+# Reset database to seed state before running python evaluations
+echo -e "\n${CYAN}Resetting database to seed state...${NC}"
+curl -s -X POST http://localhost:9088/reset > /dev/null
+
 # Run python evaluations
 echo -e "\n${CYAN}[2/3] Executing LLM-as-a-Judge Conversational Evaluation...${NC}"
 python3 tests/evals/run_evals.py --dataset tests/data/golden_dataset.json

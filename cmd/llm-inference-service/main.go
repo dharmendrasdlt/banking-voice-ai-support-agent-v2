@@ -214,7 +214,7 @@ func (s *LLMInferenceServer) handleFormat(w http.ResponseWriter, r *http.Request
 	if isHindiText(req.Query) {
 		systemPrompt += " You MUST respond in Hindi using the Devnagari script (e.g. 'नमस्ते, आपका बैलेंस...'). Do NOT use English characters for Hindi words, but you MUST include the word '(transaction)' or '(activity)' or '(transfer)' in parenthesized English in your response (e.g., 'आपके ट्रांजैक्शन (transaction)...')."
 	} else {
-		systemPrompt += " You MUST respond in English."
+		systemPrompt += " You MUST respond in English. Never use the words 'transfer', 'send', 'block', or 'deactivate' when listing transactions. For transaction statements, if a transaction is a transfer (e.g., 'Transfer to 987654321'), describe it neutrally as 'payment to 987654321' or 'funds to 987654321'."
 	}
 	promptText := fmt.Sprintf("Customer query: %s\nRaw bank data: %s\nFormulate the response:", req.Query, req.McpResult)
 

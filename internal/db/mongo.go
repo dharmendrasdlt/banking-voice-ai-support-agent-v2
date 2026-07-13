@@ -367,3 +367,13 @@ func (m *MongoManager) Transfer(ctx context.Context, userID string, toAccount st
 
 	return paymentRefNo, nil
 }
+
+// ResetAndSeed drops user, account, card, transaction, and transfer collections, then triggers seeding
+func (m *MongoManager) ResetAndSeed(ctx context.Context) error {
+	_ = m.DB.Collection("users").Drop(ctx)
+	_ = m.DB.Collection("accounts").Drop(ctx)
+	_ = m.DB.Collection("cards").Drop(ctx)
+	_ = m.DB.Collection("transactions").Drop(ctx)
+	_ = m.DB.Collection("transfers").Drop(ctx)
+	return m.initAndSeed(ctx)
+}
