@@ -43,8 +43,8 @@ echo -e "${GREEN}✓ App container stack and volumes removed.${NC}"
 # 4. Remove Ollama models specifically pulled for this app
 echo -e "${YELLOW}🦙 Removing app-specific Ollama models...${NC}"
 if command -v ollama &> /dev/null; then
-  echo "Removing chat model (qwen2.5:7b-instruct)..."
-  ollama rm qwen2.5:7b-instruct >/dev/null 2>&1 || true
+  echo "Removing chat model (gemma4:e4b)..."
+  ollama rm gemma4:e4b >/dev/null 2>&1 || true
   echo "Removing embedding model (bge-m3)..."
   ollama rm bge-m3 >/dev/null 2>&1 || true
 fi

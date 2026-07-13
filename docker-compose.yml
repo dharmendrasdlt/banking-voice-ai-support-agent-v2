@@ -84,7 +84,7 @@ services:
       - "9091:9091"
     environment:
       - OLLAMA_URL=http://host.docker.internal:11434
-      - CHAT_MODEL=qwen2.5:7b-instruct
+      - CHAT_MODEL=gemma4:e4b
       - EMBED_MODEL=bge-m3
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://host.docker.internal:4317
     extra_hosts:

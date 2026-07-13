@@ -105,11 +105,11 @@ else
     echo -e "${GREEN}✓ Embeddings model (bge-m3) exists.${NC}"
 fi
 
-if [[ ! "$models" =~ "qwen2.5:7b-instruct" ]]; then
-    echo -e "${YELLOW}Pulling chat LLM model (qwen2.5:7b-instruct)... This might take a minute.${NC}"
-    ollama pull qwen2.5:7b-instruct
+if [[ ! "$models" =~ "gemma4:e4b" ]]; then
+    echo -e "${YELLOW}Pulling chat LLM model (gemma4:e4b)... This might take a minute.${NC}"
+    ollama pull gemma4:e4b
 else
-    echo -e "${GREEN}✓ Chat model (qwen2.5:7b-instruct) exists.${NC}"
+    echo -e "${GREEN}✓ Chat model (gemma4:e4b) exists.${NC}"
 fi
 
 # 5.5. Detect and launch Native Kokoro if setup is present

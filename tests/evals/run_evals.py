@@ -313,7 +313,7 @@ async def main_async():
     parser.add_argument("--markdown", default="eval_results.md", help="Path to write evaluation results Markdown")
     parser.add_argument("--mode", default="auto", choices=["ws", "http", "auto"], help="Connection mode")
     parser.add_argument("--gemini-model", default="gemini-1.5-flash", help="Gemini API Model name")
-    parser.add_argument("--ollama-model", default="qwen2.5:7b-instruct", help="Ollama Model name")
+    parser.add_argument("--ollama-model", default="gemma4:e4b", help="Ollama Model name")
     parser.add_argument("--user-id", default="mock_user_123", help="User ID to use")
     parser.add_argument("--mock", action="store_true", help="Force mock offline execution mode")
     args = parser.parse_args()
